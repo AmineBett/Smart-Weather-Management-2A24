@@ -1,6 +1,7 @@
 #include "smartweatherwindow.h"
 
 #include "gbureaux.h"
+#include "gutilisateur.h"
 #include "stationwindow.h"
 #include "technicienne.h"
 #include "weatherwisetest.h"
@@ -20,10 +21,12 @@ SmartWeatherWindow::SmartWeatherWindow(QWidget *parent)
       equipmentButton(nullptr),
       stationsButton(nullptr),
       techniciensButton(nullptr),
+      usersButton(nullptr),
       stationWindow(new StationWindow),
       technicienneWindow(new Technicienne),
       bureauxWindow(new GBureaux),
-      equipmentWindow(new WeatherWiseTest)
+      equipmentWindow(new WeatherWiseTest),
+      usersWindow(new Gutilisateur)
 {
     setWindowTitle("SmartWeather");
     resize(1450, 850);
@@ -47,11 +50,13 @@ SmartWeatherWindow::SmartWeatherWindow(QWidget *parent)
     preparePage(technicienneWindow);
     preparePage(bureauxWindow);
     preparePage(equipmentWindow);
+    preparePage(usersWindow);
 
     stack->addWidget(stationWindow);
     stack->addWidget(technicienneWindow);
     stack->addWidget(bureauxWindow);
     stack->addWidget(equipmentWindow);
+    stack->addWidget(usersWindow);
 
     showPage(stationWindow, stationsButton);
 }
@@ -101,7 +106,7 @@ QFrame *SmartWeatherWindow::createSidebar()
     stationsButton =
         createNavigationButton("Gestion des stations");
 
-    QPushButton *usersButton =
+    usersButton =
         createNavigationButton("Gestion des utilisateurs");
 
     layout->addWidget(homeButton);
@@ -149,6 +154,16 @@ QFrame *SmartWeatherWindow::createSidebar()
         [this]()
         {
             showPage(technicienneWindow, techniciensButton);
+        }
+        );
+
+    connect(
+        usersButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            showPage(usersWindow, usersButton);
         }
         );
 
@@ -217,6 +232,15 @@ void SmartWeatherWindow::preparePage(QWidget *page)
         sidebar->hide();
         sidebar->setFixedWidth(0);
     }
+
+    QWidget *menu =
+        page->findChild<QWidget *>("menu");
+
+    if (menu)
+    {
+        menu->hide();
+        menu->setFixedWidth(0);
+    }
 }
 
 void SmartWeatherWindow::showPage(QWidget *page, QPushButton *activeButton)
@@ -231,7 +255,8 @@ void SmartWeatherWindow::updateActiveButton(QPushButton *activeButton)
         bureauButton,
         equipmentButton,
         stationsButton,
-        techniciensButton
+        techniciensButton,
+        usersButton
     };
 
     for (QPushButton *button : buttons)

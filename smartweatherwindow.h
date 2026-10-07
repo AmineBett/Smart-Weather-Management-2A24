@@ -9,6 +9,7 @@ class QStackedWidget;
 class QString;
 class QWidget;
 class GBureaux;
+class Gutilisateur;
 class StationWindow;
 class Technicienne;
 class WeatherWiseTest;
@@ -30,10 +31,12 @@ private:
     QPushButton *equipmentButton;
     QPushButton *stationsButton;
     QPushButton *techniciensButton;
+    QPushButton *usersButton;
     StationWindow *stationWindow;
     Technicienne *technicienneWindow;
     GBureaux *bureauxWindow;
     WeatherWiseTest *equipmentWindow;
+    Gutilisateur *usersWindow;
 };
 
 #endif // SMARTWEATHERWINDOW_H
