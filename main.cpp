@@ -1,5 +1,5 @@
 #include <QApplication>
-#include "stationwindow.h"
+#include "smartweatherwindow.h"
 
 int main(int argc, char *argv[])
 {
@@ -8,7 +8,7 @@ int main(int argc, char *argv[])
     app.setApplicationName("SmartWeather");
     app.setApplicationDisplayName("SmartWeather");
 
-    StationWindow window;
+    SmartWeatherWindow window;
     window.show();
 
     return app.exec();

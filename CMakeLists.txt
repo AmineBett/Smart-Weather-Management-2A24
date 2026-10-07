@@ -4,13 +4,18 @@ project(SmartWeather LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 qt_add_executable(SmartWeather
     main.cpp
+    smartweatherwindow.cpp
+    smartweatherwindow.h
     stationwindow.cpp
     stationwindow.h
+    technicienne.cpp
+    technicienne.h
 )
 
 target_link_libraries(SmartWeather

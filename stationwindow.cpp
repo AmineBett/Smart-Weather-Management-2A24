@@ -500,7 +500,6 @@ QWidget *StationWindow::createSidebar()
         technicians
         );
 
-
     // Utilisateurs
     QPushButton *users =
         new QPushButton(
