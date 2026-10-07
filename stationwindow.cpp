@@ -472,6 +472,20 @@ QWidget *StationWindow::createSidebar()
 
 
     // Équipements
+    QPushButton *office =
+        new QPushButton(
+            "Bureau   Gestion de bureau"
+            );
+
+    office->setObjectName(
+        "sideButton"
+        );
+
+    layout->addWidget(
+        office
+        );
+
+
     QPushButton *equipment =
         new QPushButton(
             "⚙   Gestion des équipements"

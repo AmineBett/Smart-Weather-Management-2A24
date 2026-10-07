@@ -4,9 +4,11 @@
 #include <QMainWindow>
 
 class QPushButton;
+class QFrame;
 class QStackedWidget;
 class QString;
 class QWidget;
+class GBureaux;
 class StationWindow;
 class Technicienne;
 
@@ -16,12 +18,19 @@ public:
     explicit SmartWeatherWindow(QWidget *parent = nullptr);
 
 private:
-    QPushButton *findNavigationButton(QWidget *page,
-                                      const QString &text) const;
+    QFrame *createSidebar();
+    QPushButton *createNavigationButton(const QString &text);
+    void preparePage(QWidget *page);
+    void showPage(QWidget *page, QPushButton *activeButton);
+    void updateActiveButton(QPushButton *activeButton);
 
     QStackedWidget *stack;
+    QPushButton *bureauButton;
+    QPushButton *stationsButton;
+    QPushButton *techniciensButton;
     StationWindow *stationWindow;
     Technicienne *technicienneWindow;
+    GBureaux *bureauxWindow;
 };
 
 #endif // SMARTWEATHERWINDOW_H

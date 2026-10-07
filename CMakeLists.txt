@@ -9,6 +9,8 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 qt_add_executable(SmartWeather
+    gbureaux.cpp
+    gbureaux.h
     main.cpp
     smartweatherwindow.cpp
     smartweatherwindow.h
