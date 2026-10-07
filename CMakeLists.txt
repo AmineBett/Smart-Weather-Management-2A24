@@ -18,6 +18,8 @@ qt_add_executable(SmartWeather
     stationwindow.h
     technicienne.cpp
     technicienne.h
+    weatherwisetest.cpp
+    weatherwisetest.h
 )
 
 target_link_libraries(SmartWeather

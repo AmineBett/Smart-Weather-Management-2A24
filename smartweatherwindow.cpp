@@ -3,6 +3,7 @@
 #include "gbureaux.h"
 #include "stationwindow.h"
 #include "technicienne.h"
+#include "weatherwisetest.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -16,11 +17,13 @@ SmartWeatherWindow::SmartWeatherWindow(QWidget *parent)
     : QMainWindow(parent),
       stack(new QStackedWidget(this)),
       bureauButton(nullptr),
+      equipmentButton(nullptr),
       stationsButton(nullptr),
       techniciensButton(nullptr),
       stationWindow(new StationWindow),
       technicienneWindow(new Technicienne),
-      bureauxWindow(new GBureaux)
+      bureauxWindow(new GBureaux),
+      equipmentWindow(new WeatherWiseTest)
 {
     setWindowTitle("SmartWeather");
     resize(1450, 850);
@@ -43,10 +46,12 @@ SmartWeatherWindow::SmartWeatherWindow(QWidget *parent)
     preparePage(stationWindow);
     preparePage(technicienneWindow);
     preparePage(bureauxWindow);
+    preparePage(equipmentWindow);
 
     stack->addWidget(stationWindow);
     stack->addWidget(technicienneWindow);
     stack->addWidget(bureauxWindow);
+    stack->addWidget(equipmentWindow);
 
     showPage(stationWindow, stationsButton);
 }
@@ -87,7 +92,7 @@ QFrame *SmartWeatherWindow::createSidebar()
     bureauButton =
         createNavigationButton("Gestion de bureau");
 
-    QPushButton *equipmentButton =
+    equipmentButton =
         createNavigationButton("Gestion des equipements");
 
     techniciensButton =
@@ -114,6 +119,16 @@ QFrame *SmartWeatherWindow::createSidebar()
         [this]()
         {
             showPage(bureauxWindow, bureauButton);
+        }
+        );
+
+    connect(
+        equipmentButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            showPage(equipmentWindow, equipmentButton);
         }
         );
 
@@ -214,6 +229,7 @@ void SmartWeatherWindow::updateActiveButton(QPushButton *activeButton)
 {
     QPushButton *buttons[] = {
         bureauButton,
+        equipmentButton,
         stationsButton,
         techniciensButton
     };
