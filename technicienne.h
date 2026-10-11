@@ -23,7 +23,6 @@
 #include <QDate>
 #include <QFile>
 #include <QTextStream>
-#include <QInputDialog>
 
 class StatisticsWidget : public QWidget
 {
@@ -94,14 +93,14 @@ private:
 
 
     // =========================
-    // RECHERCHE / TRI / IMPORT
+    // RECHERCHE / TRI / EXPORT PDF
     // =========================
 
     QLineEdit *recherche;
     QComboBox *triCombo;
     QPushButton *btnTrier;
     QPushButton *btnRechercher;
-    QPushButton *btnImporterCV;
+    QPushButton *btnExporterPDF;
 
 
     // =========================
@@ -122,15 +121,6 @@ private:
     QLabel *lblInactifs;
 
 
-    // =========================
-    // METHODES METIER
-    // =========================
-
-    QPushButton *btnEntretien;
-    QPushButton *btnQuestionnaire;
-    QPushButton *btnCompetences;
-    QPushButton *btnSpecialite;
-
 
     // =========================
     // METHODES
@@ -141,7 +131,6 @@ private:
     void setupTechnicienForm();
     void setupStatistics();
     void setupTable();
-    void setupMetiers();
 
     void appliquerStyle();
 
@@ -152,14 +141,9 @@ private:
 
     void rechercherTechnicien();
     void trierTechnicien();
-    void importerCV();
+    void exporterPDF();
 
     void selectionnerTechnicien(int row, int column);
-
-    void creerEntretien();
-    void remplirQuestionnaire();
-    void evaluerCompetences();
-    void determinerSpecialite();
 
     void updateStatistics();
 };
