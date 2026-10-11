@@ -29,13 +29,9 @@ class QVBoxLayout;
 /* ------------------------------------------------------------------ */
 struct Bureau {
     QString id;
-    QString nom;
-    QString prenom;
     QString localisation;
     QDate   dateOuverture;
     bool    actif;
-
-    QString responsable() const { return prenom + " " + nom; }
 };
 
 /* ------------------------------------------------------------------ */
@@ -267,11 +263,13 @@ private:
     void refreshTable();
     void updateStats();
     bool readForm(Bureau &b);
+    void editById(const QString &id);     // crayon : charge le bureau dans le formulaire
+    void deleteById(const QString &id);   // poubelle : supprime le bureau
     QString nextId() const;
 
     QVector<Bureau> m_bureaux;
     QString m_editId;            // ID du bureau sélectionné ("" = aucun)
-    int m_sortMode;              // -1 : ordre d'ajout, 0 : responsable, 1 : date
+    int m_sortMode;              // -1 : ordre d'ajout, 0 : date d'ouverture, 1 : localisation
     CountryGeo m_geo;
     QString m_geoNote;
 
@@ -287,8 +285,6 @@ private:
     QLabel       *m_timeLabel;
 
     QLineEdit    *m_id;
-    QLineEdit    *m_nom;
-    QLineEdit    *m_prenom;
     QComboBox    *m_loc;
     QDateEdit    *m_date;
     QComboBox    *m_statut;

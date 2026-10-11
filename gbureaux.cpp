@@ -169,8 +169,8 @@ static QLabel *makeCardTitle(const QString &t)
     return l;
 }
 
-static bool lessResponsable(const Bureau &a, const Bureau &b)
-{ return a.responsable().localeAwareCompare(b.responsable()) < 0; }
+static bool lessLocalisation(const Bureau &a, const Bureau &b)
+{ return a.localisation.localeAwareCompare(b.localisation) < 0; }
 static bool lessDate(const Bureau &a, const Bureau &b)
 { return a.dateOuverture < b.dateOuverture; }
 
@@ -195,7 +195,7 @@ GBureaux::GBureaux(QWidget *parent)
     m_table(0), m_search(0), m_sort(0),
     m_donut(0), m_actifsLabel(0), m_inactifsLabel(0),
     m_map(0), m_dateLabel(0), m_timeLabel(0),
-    m_id(0), m_nom(0), m_prenom(0), m_loc(0), m_date(0), m_statut(0)
+    m_id(0), m_loc(0), m_date(0), m_statut(0)
 {
     setWindowTitle("Smart Weather Management - Gestion des bureaux");
     setStyleSheet(styleSheet());
@@ -279,25 +279,23 @@ void GBureaux::detectCountry()
 void GBureaux::loadSampleData()
 {
     m_bureaux.clear();
-    struct Row { const char *nom, *prenom; int y, m, d; bool actif; };
+    struct Row { int y, m, d; bool actif; };
     static const Row rows[] = {
-        {"Ben Ali",   "Ahmed",   2018,  3, 12, true},
-        {"Trabelsi",  "Sonia",   2019,  7, 25, true},
-        {"Saidi",     "Mohamed", 2020, 11, 10, true},
-        {"Mnif",      "Leila",   2021,  5,  3, false},
-        {"Jaziri",    "Yassine", 2022,  9, 17, true},
-        {"Ben Salah", "Dorra",   2023,  2, 28, true},
-        {"Laabidi",   "Nizar",   2023,  6, 14, false},
-        {"Guermazi",  "Salma",   2023, 12, 22, true},
-        {"Cherif",    "Walid",   2024,  4,  8, true},
-        {"Kammoun",   "Ines",    2024, 10, 16, true}
+        {2018,  3, 12, true},
+        {2019,  7, 25, true},
+        {2020, 11, 10, true},
+        {2021,  5,  3, false},
+        {2022,  9, 17, true},
+        {2023,  2, 28, true},
+        {2023,  6, 14, false},
+        {2023, 12, 22, true},
+        {2024,  4,  8, true},
+        {2024, 10, 16, true}
     };
     for (int i = 0; i < 10; ++i) {
         Bureau b;
         b.id = QString("B%1").arg(i + 1, 3, 10, QChar('0'));
-        b.nom = QString::fromUtf8(rows[i].nom);
-        b.prenom = QString::fromUtf8(rows[i].prenom);
-        b.localisation = m_geo.villes.at(i % m_geo.villes.size());   // villes du pays détecté
+        b.localisation = m_geo.villes.at(i % m_geo.villes.size());   // villes du pays
         b.dateOuverture = QDate(rows[i].y, rows[i].m, rows[i].d);
         b.actif = rows[i].actif;
         m_bureaux.append(b);
@@ -417,8 +415,6 @@ QWidget *GBureaux::buildFormCard()
 
     m_id = new QLineEdit;
     m_id->setPlaceholderText(QString::fromUtf8("Généré automatiquement si vide (ex. B011)"));
-    m_nom = new QLineEdit;
-    m_prenom = new QLineEdit;
     m_loc = new QComboBox;
     m_loc->addItems(m_geo.villes);
     m_date = new QDateEdit(QDate::currentDate());
@@ -434,11 +430,9 @@ QWidget *GBureaux::buildFormCard()
     g->setColumnStretch(1, 1);
     g->setColumnStretch(3, 1);
     addField(g, 0, 0, "ID Bureau :", m_id);
-    addField(g, 0, 1, "Nom :", m_nom);
-    addField(g, 1, 0, QString::fromUtf8("Prénom :"), m_prenom);
-    addField(g, 1, 1, "Localisation :", m_loc);
-    addField(g, 2, 0, "Date d'ouverture :", m_date);
-    addField(g, 2, 1, "Statut :", m_statut);
+    addField(g, 0, 1, "Localisation :", m_loc);
+    addField(g, 1, 0, "Date d'ouverture :", m_date);
+    addField(g, 1, 1, "Statut :", m_statut);
     v->addLayout(g);
     return card;
 }
@@ -467,8 +461,8 @@ QWidget *GBureaux::buildToolbar()
 
     l->addWidget(new QLabel(QString::fromUtf8("↕  Trier par")));
     m_sort = new QComboBox;
-    m_sort->addItem("Nom du responsable");
-    m_sort->addItem("Date d'ouverture");
+    m_sort->addItem("Date d'ouverture");            // tri 0
+    m_sort->addItem("Localisation");                // tri 1
     m_sort->setMinimumWidth(180);
     l->addWidget(m_sort);
     QPushButton *bSort = new QPushButton("Trier");
@@ -476,6 +470,7 @@ QWidget *GBureaux::buildToolbar()
 
     m_search = new QLineEdit;
     m_search->setPlaceholderText("Rechercher par ID ou statut...");
+    m_search->setMinimumWidth(260);
     l->addWidget(m_search, 1);
     QPushButton *bFind = new QPushButton(QString::fromUtf8("🔍"));
     l->addWidget(bFind);
@@ -509,18 +504,19 @@ QWidget *GBureaux::buildTableCard()
     QHBoxLayout *top = new QHBoxLayout;
     top->addWidget(makeCardTitle(QString::fromUtf8("▤  Liste des bureaux")));
     top->addStretch();
-    QLabel *hint = new QLabel(QString::fromUtf8("Sélectionnez une ligne pour modifier les informations"));
+    QLabel *hint = new QLabel(QString::fromUtf8("✎ pour modifier  •  🗑 pour supprimer un bureau"));
     hint->setObjectName("hint");
     top->addWidget(hint);
     v->addLayout(top);
 
-    m_table = new QTableWidget(0, 6);
+    m_table = new QTableWidget(0, 5);
     QStringList headers;
-    headers << "ID Bureau" << "Nom" << QString::fromUtf8("Prénom")
-            << "Localisation" << "Date d'ouverture" << "Statut";
+    headers << "ID Bureau" << "Localisation" << "Date d'ouverture" << "Statut" << "Actions";
     m_table->setHorizontalHeaderLabels(headers);
-    m_table->verticalHeader()->setDefaultSectionSize(34);
+    m_table->verticalHeader()->setDefaultSectionSize(40);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    m_table->setColumnWidth(4, 110);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -547,26 +543,54 @@ void GBureaux::refreshTable()
             list.append(b);
     }
 
-    // 2) tri : uniquement par nom du responsable ou par date d'ouverture
+    // 2) tri : uniquement par date d'ouverture ou par localisation
     if (m_sortMode == 0)
-        std::sort(list.begin(), list.end(), lessResponsable);
+        std::stable_sort(list.begin(), list.end(), lessDate);
     else if (m_sortMode == 1)
-        std::sort(list.begin(), list.end(), lessDate);
+        std::stable_sort(list.begin(), list.end(), lessLocalisation);
 
     // 3) affichage
     m_table->setRowCount(0);
     m_table->setRowCount(list.size());
     for (int r = 0; r < list.size(); ++r) {
         const Bureau &b = list.at(r);
+        const QString id = b.id;
         m_table->setItem(r, 0, new QTableWidgetItem(b.id));
-        m_table->setItem(r, 1, new QTableWidgetItem(b.nom));
-        m_table->setItem(r, 2, new QTableWidgetItem(b.prenom));
-        m_table->setItem(r, 3, new QTableWidgetItem(b.localisation));
-        m_table->setItem(r, 4, new QTableWidgetItem(b.dateOuverture.toString("dd/MM/yyyy")));
+        m_table->setItem(r, 1, new QTableWidgetItem(b.localisation));
+        m_table->setItem(r, 2, new QTableWidgetItem(b.dateOuverture.toString("dd/MM/yyyy")));
 
         QTableWidgetItem *st = new QTableWidgetItem(b.actif ? "Actif" : "Inactif");
         st->setForeground(QBrush(QColor(b.actif ? "#16a068" : "#e5474f")));
-        m_table->setItem(r, 5, st);
+        m_table->setItem(r, 3, st);
+
+        // Actions : crayon (modifier) et poubelle (supprimer), à droite de chaque bureau
+        QWidget *aw = new QWidget;
+        QHBoxLayout *al = new QHBoxLayout(aw);
+        al->setContentsMargins(0, 0, 0, 0);
+        al->setSpacing(8);
+        al->setAlignment(Qt::AlignCenter);
+
+        QToolButton *be = new QToolButton;
+        be->setText(QString::fromUtf8("✎"));
+        be->setObjectName("actEdit");
+        be->setToolTip("Modifier ce bureau");
+        QToolButton *bd = new QToolButton;
+        bd->setText(QString::fromUtf8("🗑"));
+        bd->setObjectName("actDel");
+        bd->setToolTip("Supprimer ce bureau");
+        QToolButton *btns[2] = {be, bd};
+        for (int k = 0; k < 2; ++k) {
+            btns[k]->setFixedSize(32, 30);
+            btns[k]->setCursor(Qt::PointingHandCursor);
+            al->addWidget(btns[k]);
+        }
+        connect(be, &QToolButton::clicked, this, [this, id]() { editById(id); });
+        // la suppression est différée : le tableau est reconstruit juste après,
+        // il ne faut pas détruire le bouton pendant qu'il traite son clic
+        connect(bd, &QToolButton::clicked, this, [this, id]() {
+            QTimer::singleShot(0, this, [this, id]() { deleteById(id); });
+        });
+        m_table->setCellWidget(r, 4, aw);
     }
 
     updateStats();                       // statistiques toujours à jour
@@ -644,18 +668,9 @@ QWidget *GBureaux::buildMapCard()
 /*  Slots                                                             */
 /* ------------------------------------------------------------------ */
 
-// Lit le formulaire (nom, prénom, localisation, date, statut). ID géré à part.
+// Lit le formulaire (localisation, date, statut). L'ID est géré à part.
 bool GBureaux::readForm(Bureau &b)
 {
-    const QString nom = m_nom->text().trimmed();
-    const QString prenom = m_prenom->text().trimmed();
-    if (nom.isEmpty() || prenom.isEmpty()) {
-        QMessageBox::warning(this, "Champs obligatoires",
-                             QString::fromUtf8("Le nom et le prénom sont obligatoires."));
-        return false;
-    }
-    b.nom = nom;
-    b.prenom = prenom;
     b.localisation = m_loc->currentText();
     b.dateOuverture = m_date->date();
     b.actif = (m_statut->currentIndex() == 0);
@@ -709,20 +724,25 @@ void GBureaux::onDelete()
 {
     if (m_editId.isEmpty()) {
         QMessageBox::information(this, "Supprimer",
-                                 QString::fromUtf8("Sélectionnez d'abord une ligne dans la liste."));
+                                 QString::fromUtf8("Cliquez d'abord sur une ligne (ou sur ✎) pour choisir le bureau."));
         return;
     }
+    deleteById(m_editId);
+}
+
+void GBureaux::deleteById(const QString &id)
+{
     const QMessageBox::StandardButton rep = QMessageBox::question(
-        this, "Confirmation", QString("Supprimer le bureau %1 ?").arg(m_editId));
+        this, "Confirmation", QString("Supprimer le bureau %1 ?").arg(id));
     if (rep != QMessageBox::Yes)
         return;
 
     for (int i = m_bureaux.size() - 1; i >= 0; --i) {
-        if (m_bureaux.at(i).id == m_editId)
+        if (m_bureaux.at(i).id == id)
             m_bureaux.remove(i);
     }
     onClear();
-    refreshTable();
+    refreshTable();      // met à jour tableau, statistiques et carte
 }
 
 void GBureaux::onClear()
@@ -730,8 +750,6 @@ void GBureaux::onClear()
     m_editId.clear();
     m_id->clear();
     m_id->setReadOnly(false);
-    m_nom->clear();
-    m_prenom->clear();
     m_loc->setCurrentIndex(0);
     m_date->setDate(QDate::currentDate());
     m_statut->setCurrentIndex(0);
@@ -755,10 +773,13 @@ void GBureaux::onRowSelected()
     if (sel.isEmpty())
         return;
     QTableWidgetItem *first = m_table->item(sel.first()->row(), 0);
-    if (!first)
-        return;
-    const QString id = first->text();
+    if (first)
+        editById(first->text());
+}
 
+// Charge le bureau dans le formulaire ; le bouton "Modifier" enregistre ensuite.
+void GBureaux::editById(const QString &id)
+{
     for (int i = 0; i < m_bureaux.size(); ++i) {
         const Bureau &b = m_bureaux.at(i);
         if (b.id != id)
@@ -766,11 +787,10 @@ void GBureaux::onRowSelected()
         m_editId = id;
         m_id->setText(b.id);
         m_id->setReadOnly(true);               // l'ID ne se modifie pas
-        m_nom->setText(b.nom);
-        m_prenom->setText(b.prenom);
         m_loc->setCurrentText(b.localisation);
         m_date->setDate(b.dateOuverture);
         m_statut->setCurrentIndex(b.actif ? 0 : 1);
+        m_loc->setFocus();
         return;
     }
 }
@@ -785,12 +805,12 @@ void GBureaux::exportPdf()
     QString html = QString::fromUtf8(
         "<h2 style='color:#0f3d91'>Liste des bureaux</h2>"
         "<table border='1' cellspacing='0' cellpadding='6' width='100%'>"
-        "<tr style='background:#e8f0fc'><th>ID</th><th>Responsable</th><th>Localisation</th>"
+        "<tr style='background:#e8f0fc'><th>ID</th><th>Localisation</th>"
         "<th>Date d'ouverture</th><th>Statut</th></tr>");
     for (int i = 0; i < m_bureaux.size(); ++i) {
         const Bureau &b = m_bureaux.at(i);
-        html += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td></tr>")
-                    .arg(b.id, b.responsable(), b.localisation,
+        html += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td></tr>")
+                    .arg(b.id, b.localisation,
                          b.dateOuverture.toString("dd/MM/yyyy"), b.actif ? "Actif" : "Inactif");
     }
     html += "</table>";
@@ -850,5 +870,11 @@ QTableWidget { background: white; border: 1px solid #e3e8f0; gridline-color: #e8
 QTableWidget::item { padding-left: 6px; }
 QHeaderView::section { background: #f1f5fb; color: #24344f; border: none; border-right: 1px solid #e3e8f0; border-bottom: 1px solid #e3e8f0; padding: 10px 6px; font-weight: 700; }
 QTableCornerButton::section { background: #f1f5fb; border: none; }
+QHeaderView { background: #f1f5fb; border: none; }
+
+QToolButton#actEdit, QToolButton#actDel { border: 1px solid #d5dde9; border-radius: 5px; background: white; font-size: 15px; }
+QToolButton#actEdit:hover, QToolButton#actDel:hover { background: #eef3fb; }
+QToolButton#actEdit { color: #1d63d8; }
+QToolButton#actDel { color: #e5474f; }
 )QSS");
 }
