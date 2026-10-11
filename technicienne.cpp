@@ -1,5 +1,12 @@
 #include "technicienne.h"
 
+#include <QPrinter>
+#include <QTextDocument>
+#include <QPageLayout>
+#include <QPageSize>
+#include <QDateTime>
+#include <QDir>
+
 // =====================================================
 // STATISTICS WIDGET
 // =====================================================
@@ -607,15 +614,15 @@ void Technicienne::setupUI()
     btnRechercher->setFixedWidth(50);
 
 
-    btnImporterCV =
-        new QPushButton("▣  Importer CV");
+    btnExporterPDF =
+        new QPushButton("▤  Exporter en PDF");
 
-    btnImporterCV->setFixedWidth(130);
+    btnExporterPDF->setFixedWidth(155);
 
 
     toolsLayout->addWidget(recherche);
     toolsLayout->addWidget(btnRechercher);
-    toolsLayout->addWidget(btnImporterCV);
+    toolsLayout->addWidget(btnExporterPDF);
 
 
     contentLayout->addWidget(toolsFrame);
@@ -652,52 +659,6 @@ void Technicienne::setupUI()
 
 
     contentLayout->addWidget(tableFrame);
-
-
-    // =========================
-    // METIERS
-    // =========================
-
-    setupMetiers();
-
-    QFrame *metiersFrame =
-        new QFrame();
-
-    metiersFrame->setObjectName("card");
-
-    metiersFrame->setFixedHeight(120);
-
-    QVBoxLayout *metiersLayout =
-        new QVBoxLayout(metiersFrame);
-
-    metiersLayout->setContentsMargins(
-        10, 6, 10, 8
-        );
-
-
-    QLabel *metiersTitle =
-        new QLabel("⚙  Fonctions métiers");
-
-    metiersTitle->setObjectName("sectionTitle");
-
-    metiersLayout->addWidget(metiersTitle);
-
-
-    QHBoxLayout *metiersButtons =
-        new QHBoxLayout();
-
-    metiersButtons->setSpacing(8);
-
-
-    metiersButtons->addWidget(btnEntretien);
-    metiersButtons->addWidget(btnQuestionnaire);
-    metiersButtons->addWidget(btnCompetences);
-    metiersButtons->addWidget(btnSpecialite);
-
-
-    metiersLayout->addLayout(metiersButtons);
-
-    contentLayout->addWidget(metiersFrame);
 
 
     mainLayout->addWidget(
@@ -753,10 +714,10 @@ void Technicienne::setupUI()
         );
 
     connect(
-        btnImporterCV,
+        btnExporterPDF,
         &QPushButton::clicked,
         this,
-        &Technicienne::importerCV
+        &Technicienne::exporterPDF
         );
 
     connect(
@@ -765,38 +726,7 @@ void Technicienne::setupUI()
         this,
         &Technicienne::selectionnerTechnicien
         );
-
-
-    connect(
-        btnEntretien,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::creerEntretien
-        );
-
-    connect(
-        btnQuestionnaire,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::remplirQuestionnaire
-        );
-
-    connect(
-        btnCompetences,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::evaluerCompetences
-        );
-
-    connect(
-        btnSpecialite,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::determinerSpecialite
-        );
-
-
-    // =========================
+// =========================
     // DONNEES EXEMPLE
     // =========================
 
@@ -1218,48 +1148,6 @@ void Technicienne::setupTable()
 // METIERS
 // =====================================================
 
-void Technicienne::setupMetiers()
-{
-    btnEntretien =
-        new QPushButton(
-            "📅  Créer entretien"
-            );
-
-    btnQuestionnaire =
-        new QPushButton(
-            "▤  Remplir questionnaire"
-            );
-
-    btnCompetences =
-        new QPushButton(
-            "★  Évaluer compétences"
-            );
-
-    btnSpecialite =
-        new QPushButton(
-            "◎  Déterminer spécialité"
-            );
-
-
-    QPushButton *buttons[] = {
-        btnEntretien,
-        btnQuestionnaire,
-        btnCompetences,
-        btnSpecialite
-    };
-
-
-    for (QPushButton *button : buttons)
-    {
-        button->setMinimumHeight(55);
-        button->setObjectName("metierButton");
-        button->setCursor(
-            Qt::PointingHandCursor
-            );
-    }
-}
-
-
 // =====================================================
 // AJOUTER
 // =====================================================
@@ -1613,27 +1501,194 @@ void Technicienne::trierTechnicien()
 // IMPORTER CV
 // =====================================================
 
-void Technicienne::importerCV()
+void Technicienne::exporterPDF()
 {
-    QString fileName =
-        QFileDialog::getOpenFileName(
-            this,
-            "Importer un CV",
-            "",
-            "Documents (*.pdf *.doc *.docx);;Tous les fichiers (*)"
-            );
+    const QString defaultPath =
+        QDir::homePath() + "/liste_techniciens.pdf";
 
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        "Exporter la liste des techniciens en PDF",
+        defaultPath,
+        "Fichiers PDF (*.pdf)"
+    );
 
     if (fileName.isEmpty())
         return;
 
+    if (!fileName.endsWith(".pdf", Qt::CaseInsensitive))
+        fileName += ".pdf";
+
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(fileName);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    printer.setPageSize(QPageSize(QPageSize::A4));
+    printer.setPageOrientation(QPageLayout::Landscape);
+#else
+    printer.setPaperSize(QPrinter::A4);
+    printer.setOrientation(QPrinter::Landscape);
+#endif
+
+    printer.setFullPage(false);
+    printer.setDocName("Liste des techniciens");
+
+    // Calcul des statistiques au moment de l'export.
+    int actifsCount = 0;
+    int inactifsCount = 0;
+    int formationCount = 0;
+
+    for (int row = 0; row < table->rowCount(); ++row)
+    {
+        if (table->isRowHidden(row))
+            continue;
+
+        QTableWidgetItem *statusItem = table->item(row, 9);
+        if (!statusItem)
+            continue;
+
+        const QString status = statusItem->text().trimmed();
+        if (status == "Actif")
+            ++actifsCount;
+        else if (status == "Inactif")
+            ++inactifsCount;
+        else if (status == "En formation")
+            ++formationCount;
+    }
+
+    QString html;
+    html += R"(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        color: #173F73;
+        font-size: 8pt;
+    }
+    h1 {
+        color: #17467D;
+        font-size: 18pt;
+        margin-bottom: 3px;
+    }
+    .subtitle {
+        color: #5F7895;
+        font-size: 9pt;
+        margin-bottom: 10px;
+    }
+    .summary {
+        background: #F0F5FB;
+        border: 1px solid #D5E1EF;
+        padding: 7px;
+        margin: 8px 0 12px 0;
+        font-size: 8pt;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    th {
+        background: #17467D;
+        color: #FFFFFF;
+        font-weight: bold;
+        border: 1px solid #CBD8E6;
+        padding: 4px 3px;
+        font-size: 6.5pt;
+    }
+    td {
+        border: 1px solid #CFDAE5;
+        padding: 4px 3px;
+        font-size: 6.5pt;
+        word-wrap: break-word;
+    }
+    tr:nth-child(even) td {
+        background: #F6F9FC;
+    }
+    .footer {
+        color: #6B8198;
+        font-size: 7pt;
+        margin-top: 10px;
+    }
+</style>
+</head>
+<body>
+)";
+
+    html += "<h1>Liste des techniciens</h1>";
+    html += "<div class='subtitle'>Smart Weather Management — Rapport exporté le ";
+    html += QDateTime::currentDateTime().toString("dd/MM/yyyy à HH:mm").toHtmlEscaped();
+    html += "</div>";
+
+    html += "<div class='summary'>";
+    html += QString("Techniciens affichés : <b>%1</b> &nbsp; | &nbsp; "
+                    "Actifs : <b>%2</b> &nbsp; | &nbsp; "
+                    "Inactifs : <b>%3</b> &nbsp; | &nbsp; "
+                    "En formation : <b>%4</b>")
+                .arg(table->rowCount() - [&]() {
+                    int hiddenCount = 0;
+                    for (int r = 0; r < table->rowCount(); ++r)
+                        if (table->isRowHidden(r)) ++hiddenCount;
+                    return hiddenCount;
+                }())
+                .arg(actifsCount)
+                .arg(inactifsCount)
+                .arg(formationCount);
+    html += "</div>";
+
+    html += "<table><thead><tr>";
+    for (int col = 0; col < table->columnCount(); ++col)
+    {
+        QTableWidgetItem *headerItem = table->horizontalHeaderItem(col);
+        const QString label = headerItem ? headerItem->text() : QString();
+        html += "<th>" + label.toHtmlEscaped() + "</th>";
+    }
+    html += "</tr></thead><tbody>";
+
+    int exportedRows = 0;
+    for (int row = 0; row < table->rowCount(); ++row)
+    {
+        // Respecte le filtre de recherche visible à l'écran.
+        if (table->isRowHidden(row))
+            continue;
+
+        html += "<tr>";
+        for (int col = 0; col < table->columnCount(); ++col)
+        {
+            QTableWidgetItem *item = table->item(row, col);
+            const QString value = item ? item->text() : QString();
+            html += "<td>" + value.toHtmlEscaped() + "</td>";
+        }
+        html += "</tr>";
+        ++exportedRows;
+    }
+
+    if (exportedRows == 0)
+    {
+        html += "<tr><td colspan='" +
+                QString::number(table->columnCount()) +
+                "'>Aucun technicien à exporter.</td></tr>";
+    }
+
+    html += "</tbody></table>";
+    html += "<div class='footer'>Document généré automatiquement par Smart Weather Management.</div>";
+    html += "</body></html>";
+
+    QTextDocument document;
+    document.setDefaultFont(QFont("Arial", 8));
+    document.setHtml(html);
+    document.setPageSize(printer.pageRect(QPrinter::Point).size());
+    document.print(&printer);
 
     QMessageBox::information(
         this,
-        "Importation du CV",
-        "Le CV a été sélectionné avec succès.\n\n"
-        "Fichier :\n" + fileName
-        );
+        "Export PDF",
+        QString("Le rapport PDF a été créé avec succès :\n%1")
+            .arg(QDir::toNativeSeparators(fileName))
+    );
 }
 
 
@@ -1706,176 +1761,6 @@ void Technicienne::selectionnerTechnicien(
             table->item(row, 10)->text(),
             "dd/MM/yyyy"
             )
-        );
-}
-
-
-// =====================================================
-// CREER ENTRETIEN
-// =====================================================
-
-void Technicienne::creerEntretien()
-{
-    if (table->currentRow() < 0)
-    {
-        QMessageBox::information(
-            this,
-            "Entretien",
-            "Sélectionnez d'abord un technicien."
-            );
-
-        return;
-    }
-
-
-    QMessageBox::information(
-        this,
-        "Créer entretien",
-        "Entretien créé pour :\n" +
-            nom->text() + " " +
-            prenom->text()
-        );
-}
-
-
-// =====================================================
-// QUESTIONNAIRE
-// =====================================================
-
-void Technicienne::remplirQuestionnaire()
-{
-    if (table->currentRow() < 0)
-    {
-        QMessageBox::information(
-            this,
-            "Questionnaire",
-            "Sélectionnez d'abord un technicien."
-            );
-
-        return;
-    }
-
-
-    bool ok;
-
-    QString answer =
-        QInputDialog::getText(
-            this,
-            "Questionnaire",
-            "Compétence principale du technicien :",
-            QLineEdit::Normal,
-            "",
-            &ok
-            );
-
-
-    if (ok && !answer.isEmpty())
-    {
-        competences->setPlainText(
-            answer
-            );
-    }
-}
-
-
-// =====================================================
-// EVALUER COMPETENCES
-// =====================================================
-
-void Technicienne::evaluerCompetences()
-{
-    if (table->currentRow() < 0)
-    {
-        QMessageBox::information(
-            this,
-            "Évaluation",
-            "Sélectionnez d'abord un technicien."
-            );
-
-        return;
-    }
-
-
-    bool ok;
-
-    int note =
-        QInputDialog::getInt(
-            this,
-            "Évaluer compétences",
-            "Note sur 100 :",
-            80,
-            0,
-            100,
-            1,
-            &ok
-            );
-
-
-    if (ok)
-    {
-        QMessageBox::information(
-            this,
-            "Évaluation",
-            QString(
-                "Évaluation enregistrée : %1/100"
-                ).arg(note)
-            );
-    }
-}
-
-
-// =====================================================
-// DETERMINER SPECIALITE
-// =====================================================
-
-void Technicienne::determinerSpecialite()
-{
-    if (table->currentRow() < 0)
-    {
-        QMessageBox::information(
-            this,
-            "Spécialité",
-            "Sélectionnez d'abord un technicien."
-            );
-
-        return;
-    }
-
-
-    QString result;
-
-
-    QString text =
-        competences->toPlainText()
-            .toLower();
-
-
-    if (text.contains("réseau"))
-        result = "Réseaux";
-
-    else if (text.contains("maintenance"))
-        result = "Maintenance";
-
-    else if (text.contains("météo"))
-        result = "Météorologie";
-
-    else if (text.contains("électronique"))
-        result = "Électronique";
-
-    else
-        result = "Informatique";
-
-
-    specialite->setText(
-        result
-        );
-
-
-    QMessageBox::information(
-        this,
-        "Spécialité déterminée",
-        "Spécialité proposée : " +
-            result
         );
 }
 
@@ -2112,25 +1997,7 @@ void Technicienne::appliquerStyle()
             background: white;
             color: #173F73;
         }
-
-
-        #metierButton {
-            background: white;
-            border: 1px solid #BFD3E8;
-            color: #173F73;
-            font-weight: bold;
-            text-align: left;
-            padding-left: 15px;
-        }
-
-
-        #metierButton:hover {
-            background: #EEF6FF;
-            border: 1px solid #287ED1;
-        }
-
-
-        /* =========================
+/* =========================
            TABLE
            ========================= */
 
