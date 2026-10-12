@@ -1,1396 +1,1099 @@
 #include "technicienne.h"
 
+#include <QApplication>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QGridLayout>
+
+#include <QPainter>
+#include <QPen>
+#include <QBrush>
+#include <QFont>
+#include <QFontMetrics>
+#include <QColor>
+
+#include <QMessageBox>
+#include <QFileDialog>
+#include <QHeaderView>
+#include <QAbstractItemView>
+#include <QTableWidgetItem>
+
 #include <QPrinter>
 #include <QTextDocument>
-#include <QPageLayout>
-#include <QPageSize>
-#include <QDateTime>
-#include <QDir>
+#include <QRegularExpression>
 
-// =====================================================
-// STATISTICS WIDGET
-// =====================================================
+#include <QDate>
+#include <QTime>
+#include <QTimer>
+#include <QVector>
+#include <algorithm>
 
-StatisticsWidget::StatisticsWidget(QWidget *parent)
-    : QWidget(parent),
-    actifs(0),
-    inactifs(0)
+
+// Indices des colonnes du tableau
+namespace
 {
-    setMinimumSize(260, 220);
-    setMaximumHeight(245);
+const int COL_ID          = 0;
+const int COL_NOM         = 1;
+const int COL_PRENOM      = 2;
+const int COL_EMAIL       = 3;
+const int COL_TELEPHONE   = 4;
+const int COL_FORMATION   = 5;
+const int COL_EXPERIENCE  = 6;
+const int COL_SPECIALITE  = 7;
+const int COL_COMPETENCES = 8;
+const int COL_STATUT      = 9;
+const int COL_DATE        = 10;
+const int NB_COLONNES     = 11;
+
+QString texteCellule(const QTableWidget *table, int row, int col)
+{
+    const QTableWidgetItem *it = table->item(row, col);
+    return it ? it->text() : QString();
+}
 }
 
-void StatisticsWidget::setStatistics(int actifsValue, int inactifsValue)
+
+// ============================================================
+// TECH STATISTICS WIDGET
+// ============================================================
+
+TechStatisticsWidget::TechStatisticsWidget(QWidget *parent)
+    : QWidget(parent),
+    m_actifs(0),
+    m_inactifs(0)
 {
-    actifs = actifsValue;
-    inactifs = inactifsValue;
+    setMinimumHeight(170);
+}
+
+
+void TechStatisticsWidget::setStatistics(int actifs, int inactifs)
+{
+    m_actifs = actifs;
+    m_inactifs = inactifs;
 
     update();
 }
 
-void StatisticsWidget::paintEvent(QPaintEvent *event)
+
+void TechStatisticsWidget::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
 
     QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
 
-    painter.setRenderHint(QPainter::Antialiasing);
+    const int total = m_actifs + m_inactifs;
 
-    int total = actifs + inactifs;
+    const QFont legendFont("Segoe UI", 9);
+    const QFontMetrics fm(legendFont);
+
+    struct Item
+    {
+        QColor color;
+        QString text;
+    };
+
+    QVector<Item> items;
 
     if (total == 0)
-        total = 1;
+    {
+        Item it;
+        it.color = QColor("#DCE8F5");
+        it.text = "Aucun technicien";
+        items.append(it);
+    }
+    else
+    {
+        Item a;
+        a.color = QColor("#16A765");
+        a.text = QString("Actifs : %1 (%2%)")
+                     .arg(m_actifs)
+                     .arg(static_cast<double>(m_actifs) / total * 100.0, 0, 'f', 1);
+        items.append(a);
 
-    // Centre du cercle
-    QPoint center(width() / 2, 115);
+        Item b;
+        b.color = QColor("#EF4444");
+        b.text = QString("Inactifs : %1 (%2%)")
+                     .arg(m_inactifs)
+                     .arg(static_cast<double>(m_inactifs) / total * 100.0, 0, 'f', 1);
+        items.append(b);
+    }
 
-    // Taille du cercle
-    int diameter = 130;
+    int textWidth = 0;
+    for (int i = 0; i < items.size(); ++i)
+        textWidth = std::max(textWidth, fm.horizontalAdvance(items[i].text));
 
-    QRectF rect(
-        center.x() - diameter / 2,
-        center.y() - diameter / 2,
-        diameter,
-        diameter
-        );
+    const int dot = 10;
+    const int dotGap = 8;
+    const int gap = 24;
+    const int legendWidth = dot + dotGap + textWidth;
 
-    // =========================
-    // CERCLE GRIS DE BASE
-    // =========================
+    int diameter = std::min(height() - 10, 150);
+    diameter = std::min(diameter, width() - legendWidth - gap - 10);
+    diameter = std::max(diameter, 60);
 
-    QPen backgroundPen(QColor("#E8EEF5"));
-    backgroundPen.setWidth(22);
+    const int blockWidth = diameter + gap + legendWidth;
+    const double x0 = (width() - blockWidth) / 2.0;
+    const double y0 = (height() - diameter) / 2.0;
 
-    painter.setPen(backgroundPen);
-    painter.drawArc(rect, 0, 360 * 16);
+    const QRectF pieRect(x0, y0, diameter, diameter);
+    const double holeSize = diameter * 0.62;
+    const QRectF holeRect(pieRect.center().x() - holeSize / 2.0,
+                          pieRect.center().y() - holeSize / 2.0,
+                          holeSize,
+                          holeSize);
 
+    if (total == 0)
+    {
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor("#DCE8F5"), 12));
+        painter.drawEllipse(pieRect.adjusted(6, 6, -6, -6));
+    }
+    else
+    {
+        const int startAngle = 90 * 16;
+        const int actifAngle =
+            qRound(static_cast<double>(m_actifs) / total * 360 * 16);
+        const int inactifAngle = 360 * 16 - actifAngle;
 
-    // =========================
-    // PARTIE ACTIVE
-    // =========================
+        painter.setPen(Qt::NoPen);
 
-    double angleActifs =
-        360.0 * actifs / total;
+        painter.setBrush(QColor("#16A765"));
+        painter.drawPie(pieRect, startAngle, -actifAngle);
 
-    QPen activePen(QColor("#18A66A"));
-    activePen.setWidth(22);
-    activePen.setCapStyle(Qt::FlatCap);
+        painter.setBrush(QColor("#EF4444"));
+        painter.drawPie(pieRect, startAngle - actifAngle, -inactifAngle);
 
-    painter.setPen(activePen);
+        painter.setBrush(Qt::white);
+        painter.drawEllipse(holeRect);
+    }
 
-    painter.drawArc(
-        rect,
-        90 * 16,
-        -angleActifs * 16
-        );
-
-
-    // =========================
-    // PARTIE INACTIVE
-    // =========================
-
-    double angleInactifs =
-        360.0 * inactifs / total;
-
-    QPen inactivePen(QColor("#EF5350"));
-    inactivePen.setWidth(22);
-    inactivePen.setCapStyle(Qt::FlatCap);
-
-    painter.setPen(inactivePen);
-
-    painter.drawArc(
-        rect,
-        (90 - angleActifs) * 16,
-        -angleInactifs * 16
-        );
-
-
-    // =========================
-    // CENTRE BLANC
-    // =========================
-
-    painter.setBrush(Qt::white);
-    painter.setPen(Qt::NoPen);
-
-    painter.drawEllipse(
-        center,
-        42,
-        42
-        );
-
-
-    // =========================
-    // TOTAL
-    // =========================
-
-    painter.setPen(QColor("#173F73"));
-
-    QFont fontTotal;
-    fontTotal.setPointSize(19);
-    fontTotal.setBold(true);
-
-    painter.setFont(fontTotal);
-
-    QRect totalRect(
-        center.x() - 45,
-        center.y() - 17,
-        90,
-        30
-        );
-
+    // Texte au centre
+    painter.setPen(QColor("#173B6C"));
+    painter.setFont(QFont("Segoe UI", 22, QFont::Bold));
     painter.drawText(
-        totalRect,
+        QRectF(holeRect.left(), holeRect.center().y() - 28, holeRect.width(), 32),
         Qt::AlignCenter,
-        QString::number(actifs + inactifs)
-        );
+        QString::number(total));
 
-
-    // =========================
-    // TEXTE TOTAL
-    // =========================
-
-    QFont fontPetit;
-    fontPetit.setPointSize(8);
-
-    painter.setFont(fontPetit);
-
-    QRect textRect(
-        center.x() - 45,
-        center.y() + 10,
-        90,
-        20
-        );
-
+    painter.setFont(QFont("Segoe UI", 9));
     painter.drawText(
-        textRect,
+        QRectF(holeRect.left(), holeRect.center().y() + 4, holeRect.width(), 20),
         Qt::AlignCenter,
-        "techniciens"
-        );
+        "techniciens");
 
-
-    // =========================
-    // LEGENDE
-    // =========================
-
-    QFont legendFont;
-    legendFont.setPointSize(9);
-
+    // Légende
     painter.setFont(legendFont);
 
-    // Actifs
-    painter.setBrush(QColor("#18A66A"));
-    painter.drawEllipse(235, 55, 9, 9);
+    const int rowHeight = 28;
+    const double legendX = x0 + diameter + gap;
+    double rowY = height() / 2.0 - (items.size() * rowHeight) / 2.0;
 
-    painter.setPen(QColor("#173F73"));
+    for (int i = 0; i < items.size(); ++i)
+    {
+        const double cy = rowY + rowHeight / 2.0;
 
-    painter.drawText(
-        250,
-        64,
-        QString("Actifs  %1").arg(actifs)
-        );
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(items[i].color);
+        painter.drawEllipse(QRectF(legendX, cy - dot / 2.0, dot, dot));
 
+        painter.setPen(QColor("#234A78"));
+        painter.drawText(
+            QRectF(legendX + dot + dotGap, rowY, textWidth + 4, rowHeight),
+            Qt::AlignVCenter | Qt::AlignLeft,
+            items[i].text);
 
-    // Inactifs
-    painter.setBrush(QColor("#EF5350"));
-
-    painter.drawEllipse(235, 90, 9, 9);
-
-    painter.setPen(QColor("#173F73"));
-
-    painter.drawText(
-        250,
-        99,
-        QString("Inactifs  %1").arg(inactifs)
-        );
+        rowY += rowHeight;
+    }
 }
 
 
-// =====================================================
-// CONSTRUCTEUR
-// =====================================================
+// ============================================================
+// FENETRE TECHNICIENNE
+// ============================================================
 
 Technicienne::Technicienne(QWidget *parent)
-    : QMainWindow(parent)
+    : QMainWindow(parent),
+    sidebar(nullptr),
+    btnAccueil(nullptr),
+    btnBureau(nullptr),
+    btnEquipements(nullptr),
+    btnTechniciens(nullptr),
+    btnStations(nullptr),
+    btnUtilisateurs(nullptr),
+    idTechnicien(nullptr),
+    nom(nullptr),
+    prenom(nullptr),
+    email(nullptr),
+    telephone(nullptr),
+    formation(nullptr),
+    experience(nullptr),
+    specialite(nullptr),
+    competences(nullptr),
+    statut(nullptr),
+    dateIntegration(nullptr),
+    btnAjouter(nullptr),
+    btnModifier(nullptr),
+    btnSupprimer(nullptr),
+    btnVider(nullptr),
+    recherche(nullptr),
+    triCombo(nullptr),
+    btnTrier(nullptr),
+    btnRechercher(nullptr),
+    btnExporterPDF(nullptr),
+    table(nullptr),
+    statisticsWidget(nullptr),
+    lblTotal(nullptr),
+    lblActifs(nullptr),
+    lblInactifs(nullptr)
 {
+    setWindowTitle("SmartWeather - Gestion des techniciens");
+
+    resize(1450, 850);
+    setMinimumSize(1200, 700);
+
     setupUI();
     appliquerStyle();
 
-    resize(1600, 900);
-
-    setMinimumSize(1250, 750);
-
-    setWindowTitle(
-        "Smart Weather Management - Gestion des techniciens"
-        );
+    chargerDonneesDemo();
+    updateStatistics();
 }
 
-
-// =====================================================
-// DESTRUCTEUR
-// =====================================================
 
 Technicienne::~Technicienne()
 {
 }
 
 
-// =====================================================
-// SETUP PRINCIPAL
-// =====================================================
+// ============================================================
+// SETUP UI
+// ============================================================
 
 void Technicienne::setupUI()
 {
     QWidget *central = new QWidget(this);
-
     setCentralWidget(central);
 
-    QHBoxLayout *mainLayout =
-        new QHBoxLayout(central);
-
+    QHBoxLayout *mainLayout = new QHBoxLayout(central);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
+    // Barre latérale
+    QWidget *side = setupSidebar();
+    side->setFixedWidth(235);
+    mainLayout->addWidget(side);
 
-    // =========================
-    // SIDEBAR
-    // =========================
+    // Partie droite
+    QWidget *content = new QWidget;
+    QVBoxLayout *contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(20, 0, 20, 15);
+    contentLayout->setSpacing(12);
 
-    setupSidebar();
+    contentLayout->addWidget(setupHeader());
+    contentLayout->addWidget(setupTechnicienForm());
+    contentLayout->addWidget(setupActionBar());
 
-    mainLayout->addWidget(sidebar);
+    QHBoxLayout *bottomLayout = new QHBoxLayout;
+    bottomLayout->setSpacing(12);
 
+    bottomLayout->addWidget(setupTable(), 7);
+    bottomLayout->addWidget(setupStatistics(), 3);
 
-    // =========================
-    // CONTENU PRINCIPAL
-    // =========================
+    contentLayout->addLayout(bottomLayout, 1);
 
-    QWidget *content = new QWidget();
-
-    QVBoxLayout *contentLayout =
-        new QVBoxLayout(content);
-
-    contentLayout->setContentsMargins(
-        18, 0, 18, 8
-        );
-
-    contentLayout->setSpacing(8);
-
-
-    // =========================
-    // HEADER
-    // =========================
-
-    QWidget *header = new QWidget();
-
-    header->setFixedHeight(70);
-
-    QHBoxLayout *headerLayout =
-        new QHBoxLayout(header);
-
-    headerLayout->setContentsMargins(
-        30, 0, 20, 0
-        );
-
-
-    QVBoxLayout *titleLayout =
-        new QVBoxLayout();
-
-    QLabel *title =
-        new QLabel("Gestion des techniciens");
-
-    title->setObjectName("pageTitle");
-
-    QLabel *subtitle =
-        new QLabel(
-            "Gérez les techniciens et leurs informations"
-            );
-
-    subtitle->setObjectName("pageSubtitle");
-
-    titleLayout->addWidget(title);
-    titleLayout->addWidget(subtitle);
-
-    headerLayout->addLayout(titleLayout);
-
-    headerLayout->addStretch();
-
-
-    QLabel *date =
-        new QLabel("01/10/2026     15:22");
-
-    QLabel *admin =
-        new QLabel("●   Administrateur   ▼");
-
-    date->setObjectName("headerInfo");
-    admin->setObjectName("headerInfo");
-
-    headerLayout->addWidget(date);
-    headerLayout->addSpacing(20);
-    headerLayout->addWidget(admin);
-
-
-    contentLayout->addWidget(header);
-
-
-    // =========================
-    // INFORMATIONS + STATISTIQUES
-    // =========================
-
-    QHBoxLayout *topLayout =
-        new QHBoxLayout();
-
-    topLayout->setSpacing(10);
-
-
-    // FORMULAIRE
-    setupTechnicienForm();
-
-
-    QFrame *formFrame = new QFrame();
-
-    formFrame->setObjectName("card");
-
-    formFrame->setMinimumHeight(300);
-    formFrame->setMaximumHeight(315);
-
-    QVBoxLayout *formLayout =
-        new QVBoxLayout(formFrame);
-
-    formLayout->setContentsMargins(
-        15, 8, 15, 8
-        );
-
-    QLabel *formTitle =
-        new QLabel("♟  Informations du technicien");
-
-    formTitle->setObjectName("sectionTitle");
-
-    formLayout->addWidget(formTitle);
-
-    QGridLayout *grid =
-        new QGridLayout();
-
-    grid->setHorizontalSpacing(10);
-    grid->setVerticalSpacing(7);
-
-
-    // Ligne 1
-
-    grid->addWidget(
-        new QLabel("ID Technicien :"),
-        0, 0
-        );
-
-    grid->addWidget(idTechnicien, 0, 1);
-
-    grid->addWidget(
-        new QLabel("Nom :"),
-        0, 2
-        );
-
-    grid->addWidget(nom, 0, 3);
-
-
-    // Ligne 2
-
-    grid->addWidget(
-        new QLabel("Prénom :"),
-        1, 0
-        );
-
-    grid->addWidget(prenom, 1, 1);
-
-    grid->addWidget(
-        new QLabel("Email :"),
-        1, 2
-        );
-
-    grid->addWidget(email, 1, 3);
-
-
-    // Ligne 3
-
-    grid->addWidget(
-        new QLabel("Téléphone :"),
-        2, 0
-        );
-
-    grid->addWidget(telephone, 2, 1);
-
-    grid->addWidget(
-        new QLabel("Formation :"),
-        2, 2
-        );
-
-    grid->addWidget(formation, 2, 3);
-
-
-    // Ligne 4
-
-    grid->addWidget(
-        new QLabel("Expérience :"),
-        3, 0
-        );
-
-    grid->addWidget(experience, 3, 1);
-
-    grid->addWidget(
-        new QLabel("Spécialité :"),
-        3, 2
-        );
-
-    grid->addWidget(specialite, 3, 3);
-
-
-    // Ligne 5
-
-    grid->addWidget(
-        new QLabel("Statut :"),
-        4, 0
-        );
-
-    grid->addWidget(statut, 4, 1);
-
-    grid->addWidget(
-        new QLabel("Date intégration :"),
-        4, 2
-        );
-
-    grid->addWidget(dateIntegration, 4, 3);
-
-
-    // Compétences
-
-    grid->addWidget(
-        new QLabel("Compétences :"),
-        5, 0
-        );
-
-    grid->addWidget(
-        competences,
-        5, 1, 1, 3
-        );
-
-
-    grid->setColumnStretch(1, 1);
-    grid->setColumnStretch(3, 1);
-
-    formLayout->addLayout(grid);
-
-
-    // =========================
-    // STATISTIQUES
-    // =========================
-
-    QFrame *statsFrame = new QFrame();
-
-    statsFrame->setObjectName("card");
-
-    statsFrame->setFixedWidth(330);
-    statsFrame->setMinimumHeight(300);
-    statsFrame->setMaximumHeight(315);
-
-    QVBoxLayout *statsLayout =
-        new QVBoxLayout(statsFrame);
-
-    statsLayout->setContentsMargins(
-        12, 8, 12, 5
-        );
-
-    QLabel *statsTitle =
-        new QLabel("📊  Statistiques des techniciens");
-
-    statsTitle->setObjectName("sectionTitle");
-
-    statsLayout->addWidget(statsTitle);
-
-    statisticsWidget =
-        new StatisticsWidget();
-
-    statsLayout->addWidget(
-        statisticsWidget,
-        1,
-        Qt::AlignCenter
-        );
-
-
-    topLayout->addWidget(
-        formFrame,
-        1
-        );
-
-    topLayout->addWidget(
-        statsFrame
-        );
-
-
-    contentLayout->addLayout(topLayout);
-
-
-    // =========================
-    // BOUTONS + RECHERCHE
-    // =========================
-
-    QFrame *toolsFrame = new QFrame();
-
-    toolsFrame->setObjectName("card");
-
-    toolsFrame->setFixedHeight(55);
-
-    QHBoxLayout *toolsLayout =
-        new QHBoxLayout(toolsFrame);
-
-    toolsLayout->setContentsMargins(
-        10, 7, 10, 7
-        );
-
-    btnAjouter =
-        new QPushButton("＋  Ajouter");
-
-    btnModifier =
-        new QPushButton("✎  Modifier");
-
-    btnSupprimer =
-        new QPushButton("▣  Supprimer");
-
-    btnVider =
-        new QPushButton("↻  Vider");
-
-
-    btnAjouter->setObjectName("btnAdd");
-    btnModifier->setObjectName("btnModify");
-    btnSupprimer->setObjectName("btnDelete");
-    btnVider->setObjectName("btnClear");
-
-
-    toolsLayout->addWidget(btnAjouter);
-    toolsLayout->addWidget(btnModifier);
-    toolsLayout->addWidget(btnSupprimer);
-    toolsLayout->addWidget(btnVider);
-
-    toolsLayout->addSpacing(12);
-
-
-    QLabel *triLabel =
-        new QLabel("↕  Trier par :");
-
-    triCombo =
-        new QComboBox();
-
-    triCombo->addItems({
-        "Nom",
-        "Prénom",
-        "Expérience",
-        "Spécialité",
-        "Statut"
-    });
-
-    triCombo->setFixedWidth(130);
-
-    btnTrier =
-        new QPushButton("Trier");
-
-    btnTrier->setFixedWidth(70);
-
-
-    toolsLayout->addWidget(triLabel);
-    toolsLayout->addWidget(triCombo);
-    toolsLayout->addWidget(btnTrier);
-
-
-    recherche =
-        new QLineEdit();
-
-    recherche->setPlaceholderText(
-        "Rechercher par ID, nom, spécialité..."
-        );
-
-    recherche->setFixedWidth(230);
-
-
-    btnRechercher =
-        new QPushButton("🔍");
-
-    btnRechercher->setFixedWidth(50);
-
-
-    btnExporterPDF =
-        new QPushButton("▤  Exporter en PDF");
-
-    btnExporterPDF->setFixedWidth(155);
-
-
-    toolsLayout->addWidget(recherche);
-    toolsLayout->addWidget(btnRechercher);
-    toolsLayout->addWidget(btnExporterPDF);
-
-
-    contentLayout->addWidget(toolsFrame);
-
-
-    // =========================
-    // TABLE
-    // =========================
-
-    setupTable();
-
-    QFrame *tableFrame = new QFrame();
-
-    tableFrame->setObjectName("card");
-
-    tableFrame->setMinimumHeight(235);
-    tableFrame->setMaximumHeight(250);
-
-    QVBoxLayout *tableLayout =
-        new QVBoxLayout(tableFrame);
-
-    tableLayout->setContentsMargins(
-        10, 6, 10, 5
-        );
-
-    QLabel *tableTitle =
-        new QLabel("▦  Liste des techniciens");
-
-    tableTitle->setObjectName("sectionTitle");
-
-    tableLayout->addWidget(tableTitle);
-
-    tableLayout->addWidget(table);
-
-
-    contentLayout->addWidget(tableFrame);
-
-
-    mainLayout->addWidget(
-        content,
-        1
-        );
-
-
-    // =========================
-    // SIGNALS
-    // =========================
-
-    connect(
-        btnAjouter,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::ajouterTechnicien
-        );
-
-    connect(
-        btnModifier,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::modifierTechnicien
-        );
-
-    connect(
-        btnSupprimer,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::supprimerTechnicien
-        );
-
-    connect(
-        btnVider,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::viderChamps
-        );
-
-    connect(
-        btnRechercher,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::rechercherTechnicien
-        );
-
-    connect(
-        btnTrier,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::trierTechnicien
-        );
-
-    connect(
-        btnExporterPDF,
-        &QPushButton::clicked,
-        this,
-        &Technicienne::exporterPDF
-        );
-
-    connect(
-        table,
-        &QTableWidget::cellClicked,
-        this,
-        &Technicienne::selectionnerTechnicien
-        );
-// =========================
-    // DONNEES EXEMPLE
-    // =========================
-
-    QStringList ids = {
-        "T001",
-        "T002",
-        "T003",
-        "T004",
-        "T005"
-    };
-
-    QStringList noms = {
-        "Ben Ali",
-        "Trabelsi",
-        "Mansouri",
-        "Saidi",
-        "Zribi"
-    };
-
-    QStringList prenoms = {
-        "Ahmed",
-        "Sami",
-        "Amel",
-        "Yassine",
-        "Walid"
-    };
-
-    QStringList emails = {
-        "ahmed@gmail.com",
-        "sami@gmail.com",
-        "amel@gmail.com",
-        "yassine@gmail.com",
-        "walid@gmail.com"
-    };
-
-    QStringList phones = {
-        "22111222",
-        "22333444",
-        "22888999",
-        "22114567",
-        "22557890"
-    };
-
-    QStringList formations = {
-        "Informatique",
-        "Informatique",
-        "Météorologie",
-        "Électronique",
-        "Réseaux"
-    };
-
-    QStringList experiences = {
-        "5",
-        "3",
-        "7",
-        "4",
-        "6"
-    };
-
-    QStringList specialites = {
-        "Maintenance",
-        "Informatique",
-        "Météorologie",
-        "Électronique",
-        "Réseaux"
-    };
-
-    QStringList statuts = {
-        "Actif",
-        "Actif",
-        "Actif",
-        "Inactif",
-        "Actif"
-    };
-
-    QStringList dates = {
-        "15/09/2023",
-        "10/01/2024",
-        "22/03/2024",
-        "12/06/2023",
-        "30/11/2022"
-    };
-
-
-    for (int i = 0; i < ids.size(); i++)
-    {
-        int row = table->rowCount();
-
-        table->insertRow(row);
-
-        table->setItem(
-            row, 0,
-            new QTableWidgetItem(ids[i])
-            );
-
-        table->setItem(
-            row, 1,
-            new QTableWidgetItem(noms[i])
-            );
-
-        table->setItem(
-            row, 2,
-            new QTableWidgetItem(prenoms[i])
-            );
-
-        table->setItem(
-            row, 3,
-            new QTableWidgetItem(emails[i])
-            );
-
-        table->setItem(
-            row, 4,
-            new QTableWidgetItem(phones[i])
-            );
-
-        table->setItem(
-            row, 5,
-            new QTableWidgetItem(formations[i])
-            );
-
-        table->setItem(
-            row, 6,
-            new QTableWidgetItem(experiences[i])
-            );
-
-        table->setItem(
-            row, 7,
-            new QTableWidgetItem(specialites[i])
-            );
-
-        table->setItem(
-            row, 8,
-            new QTableWidgetItem(
-                "Maintenance, analyse, diagnostic"
-                )
-            );
-
-        table->setItem(
-            row, 9,
-            new QTableWidgetItem(statuts[i])
-            );
-
-        table->setItem(
-            row, 10,
-            new QTableWidgetItem(dates[i])
-            );
-    }
-
-
-    updateStatistics();
+    mainLayout->addWidget(content, 1);
 }
 
 
-// =====================================================
+// ============================================================
 // SIDEBAR
-// =====================================================
+// ============================================================
 
-void Technicienne::setupSidebar()
+QWidget *Technicienne::setupSidebar()
 {
-    sidebar = new QWidget();
-
+    sidebar = new QWidget;
     sidebar->setObjectName("sidebar");
 
-    sidebar->setFixedWidth(285);
+    QVBoxLayout *layout = new QVBoxLayout(sidebar);
+    layout->setContentsMargins(10, 25, 10, 20);
+    layout->setSpacing(8);
 
-    QVBoxLayout *layout =
-        new QVBoxLayout(sidebar);
+    QLabel *logo = new QLabel(QString::fromUtf8("☀"));
+    logo->setAlignment(Qt::AlignCenter);
+    logo->setStyleSheet("font-size: 48px; color: #FFD21F;");
+    layout->addWidget(logo);
 
-    layout->setContentsMargins(
-        8, 20, 8, 15
-        );
+    QLabel *title = new QLabel("SMART WEATHER\nMANAGEMENT");
+    title->setAlignment(Qt::AlignCenter);
+    title->setStyleSheet(
+        "color: white;"
+        "font-size: 18px;"
+        "font-weight: bold;"
+        "padding-bottom: 30px;");
+    layout->addWidget(title);
 
-    layout->setSpacing(7);
+    btnAccueil = new QPushButton(QString::fromUtf8("⌂   Accueil"));
+    btnAccueil->setObjectName("sideButton");
+    layout->addWidget(btnAccueil);
 
+    QPushButton *btnBureaux = new QPushButton(QString::fromUtf8("🏢   Gestion des bureaux"));
+    btnBureaux->setObjectName("sideButton");
+    layout->addWidget(btnBureaux);
 
-    QLabel *logoIcon =
-        new QLabel("☀");
+    btnEquipements = new QPushButton(QString::fromUtf8("⚙   Gestion des équipements"));
+    btnEquipements->setObjectName("sideButton");
+    layout->addWidget(btnEquipements);
 
-    logoIcon->setAlignment(
-        Qt::AlignCenter
-        );
+    btnTechniciens = new QPushButton(QString::fromUtf8("♟   Gestion des techniciens"));
+    btnTechniciens->setObjectName("sideButtonActive");
+    layout->addWidget(btnTechniciens);
 
-    logoIcon->setObjectName("logoIcon");
+    btnStations = new QPushButton(QString::fromUtf8("☁   Gestion des stations"));
+    btnStations->setObjectName("sideButton");
+    layout->addWidget(btnStations);
 
-    layout->addWidget(logoIcon);
-
-
-    QLabel *logoText =
-        new QLabel(
-            "SMART WEATHER\nMANAGEMENT"
-            );
-
-    logoText->setAlignment(
-        Qt::AlignCenter
-        );
-
-    logoText->setObjectName("logoText");
-
-    layout->addWidget(logoText);
-
-    layout->addSpacing(20);
-
-
-    btnAccueil =
-        new QPushButton("⌂   Accueil");
-
-    btnBureau =
-        new QPushButton("▣   Gestion de bureau");
-
-    btnEquipements =
-        new QPushButton("⚙   Gestion des équipements");
-
-    btnTechniciens =
-        new QPushButton("♟   Gestion des techniciens");
-
-    btnStations =
-        new QPushButton("♨   Gestion des stations");
-
-    btnUtilisateurs =
-        new QPushButton("♟   Gestion des utilisateurs");
-
-
-    QPushButton *buttons[] = {
-        btnAccueil,
-        btnBureau,
-        btnEquipements,
-        btnTechniciens,
-        btnStations,
-        btnUtilisateurs
-    };
-
-
-    for (QPushButton *button : buttons)
-    {
-        button->setObjectName("sideButton");
-
-        button->setMinimumHeight(52);
-
-        button->setCursor(
-            Qt::PointingHandCursor
-            );
-
-        layout->addWidget(button);
-    }
-
-
-    btnTechniciens->setObjectName(
-        "sideButtonSelected"
-        );
-
+    btnUtilisateurs = new QPushButton(QString::fromUtf8("♟   Gestion des utilisateurs"));
+    btnUtilisateurs->setObjectName("sideButton");
+    layout->addWidget(btnUtilisateurs);
 
     layout->addStretch();
 
+    btnBureau = new QPushButton(QString::fromUtf8("⚙   Paramètres"));
+    btnBureau->setObjectName("sideButton");
+    layout->addWidget(btnBureau);
 
-    QLabel *bottom =
-        new QLabel(
-            "Données fiables\npour un avenir sûr"
-            );
+    // Navigation : clic sur "Gestion des stations" -> interface des stations
+    connect(btnStations, &QPushButton::clicked,
+            this, &Technicienne::stationsRequested);
 
-    bottom->setAlignment(
-        Qt::AlignCenter
-        );
-
-    bottom->setObjectName(
-        "sidebarBottom"
-        );
-
-    layout->addWidget(bottom);
+    return sidebar;
 }
 
 
-// =====================================================
-// FORMULAIRE
-// =====================================================
+// ============================================================
+// HEADER
+// ============================================================
 
-void Technicienne::setupTechnicienForm()
+QWidget *Technicienne::setupHeader()
 {
-    idTechnicien = new QLineEdit();
-    nom = new QLineEdit();
-    prenom = new QLineEdit();
-    email = new QLineEdit();
-    telephone = new QLineEdit();
-    formation = new QLineEdit();
+    QWidget *header = new QWidget;
+    header->setObjectName("header");
+    header->setFixedHeight(90);
 
-    experience = new QSpinBox();
+    QHBoxLayout *layout = new QHBoxLayout(header);
+    layout->setContentsMargins(25, 8, 25, 8);
 
-    experience->setRange(0, 50);
+    QVBoxLayout *titles = new QVBoxLayout;
 
-    experience->setSuffix(" ans");
+    QLabel *title = new QLabel("Gestion des techniciens");
+    title->setObjectName("headerTitle");
 
-    specialite = new QLineEdit();
+    QLabel *subtitle = new QLabel(
+        "Gérez les techniciens et leurs informations");
+    subtitle->setObjectName("headerSubtitle");
 
-    competences = new QTextEdit();
+    titles->addWidget(title);
+    titles->addWidget(subtitle);
 
-    competences->setPlaceholderText(
-        "Décrivez les compétences du technicien..."
-        );
+    layout->addLayout(titles);
+    layout->addStretch();
 
-    competences->setMaximumHeight(50);
+    QLabel *date = new QLabel(QDate::currentDate().toString("dd/MM/yyyy"));
+    date->setStyleSheet("color: white; font-weight: bold; font-size: 14px;");
+
+    QLabel *separator = new QLabel(QString::fromUtf8("  •  "));
+    separator->setStyleSheet("color: white;");
+
+    QLabel *admin = new QLabel(QString::fromUtf8("Administrateur ▼"));
+    admin->setStyleSheet("color: white; font-weight: bold;");
+
+    layout->addWidget(date);
+
+    QLabel *clock = new QLabel(QTime::currentTime().toString("HH:mm"));
+    clock->setStyleSheet(
+        "color: white; font-weight: bold; font-size: 14px; padding-left: 14px;");
+
+    QTimer *clockTimer = new QTimer(clock);
+    connect(clockTimer, &QTimer::timeout, clock,
+            [clock]() { clock->setText(QTime::currentTime().toString("HH:mm")); });
+    clockTimer->start(1000);
+
+    layout->addWidget(clock);
+    layout->addWidget(separator);
+    layout->addWidget(admin);
+
+    return header;
+}
 
 
-    statut = new QComboBox();
+// ============================================================
+// FORMULAIRE TECHNICIEN
+// ============================================================
 
-    statut->addItems({
-        "Actif",
-        "Inactif",
-        "En formation"
-    });
+QGroupBox *Technicienne::setupTechnicienForm()
+{
+    QGroupBox *box = new QGroupBox(QString::fromUtf8("♟   Informations du technicien"));
 
+    QGridLayout *layout = new QGridLayout(box);
+    layout->setContentsMargins(20, 25, 20, 18);
+    layout->setHorizontalSpacing(12);
+    layout->setVerticalSpacing(10);
 
-    dateIntegration = new QDateEdit();
+    idTechnicien = new QLineEdit;
+    idTechnicien->setPlaceholderText("Ex : 1");
 
-    dateIntegration->setDate(
-        QDate::currentDate()
-        );
+    nom = new QLineEdit;
+    nom->setPlaceholderText("Nom");
 
+    prenom = new QLineEdit;
+    prenom->setPlaceholderText("Prénom");
+
+    email = new QLineEdit;
+    email->setPlaceholderText("exemple@mail.com");
+
+    telephone = new QLineEdit;
+    telephone->setPlaceholderText("Ex : 20123456");
+
+    formation = new QLineEdit;
+    formation->setPlaceholderText("Formation");
+
+    experience = new QSpinBox;
+    experience->setRange(0, 60);
+    experience->setSuffix(" an(s)");
+
+    specialite = new QLineEdit;
+    specialite->setPlaceholderText("Spécialité");
+
+    statut = new QComboBox;
+    statut->addItem("Actif");
+    statut->addItem("Inactif");
+
+    dateIntegration = new QDateEdit(QDate::currentDate());
     dateIntegration->setCalendarPopup(true);
+    dateIntegration->setDisplayFormat("dd/MM/yyyy");
+
+    competences = new QTextEdit;
+    competences->setPlaceholderText("Compétences (séparées par des virgules)");
+    competences->setFixedHeight(64);
+    competences->setAcceptRichText(false);
+
+    // Ligne 0
+    layout->addWidget(new QLabel("ID :"), 0, 0);
+    layout->addWidget(idTechnicien, 0, 1);
+    layout->addWidget(new QLabel("Nom :"), 0, 2);
+    layout->addWidget(nom, 0, 3);
+    layout->addWidget(new QLabel("Prénom :"), 0, 4);
+    layout->addWidget(prenom, 0, 5);
+
+    // Ligne 1
+    layout->addWidget(new QLabel("Email :"), 1, 0);
+    layout->addWidget(email, 1, 1);
+    layout->addWidget(new QLabel("Téléphone :"), 1, 2);
+    layout->addWidget(telephone, 1, 3);
+    layout->addWidget(new QLabel("Formation :"), 1, 4);
+    layout->addWidget(formation, 1, 5);
+
+    // Ligne 2
+    layout->addWidget(new QLabel("Expérience :"), 2, 0);
+    layout->addWidget(experience, 2, 1);
+    layout->addWidget(new QLabel("Spécialité :"), 2, 2);
+    layout->addWidget(specialite, 2, 3);
+    layout->addWidget(new QLabel("Statut :"), 2, 4);
+    layout->addWidget(statut, 2, 5);
+
+    // Ligne 3
+    layout->addWidget(new QLabel("Date d'intégration :"), 3, 0);
+    layout->addWidget(dateIntegration, 3, 1);
+    layout->addWidget(new QLabel("Compétences :"), 3, 2);
+    layout->addWidget(competences, 3, 3, 1, 3);
+
+    layout->setColumnStretch(1, 1);
+    layout->setColumnStretch(3, 1);
+    layout->setColumnStretch(5, 1);
+
+    return box;
+}
 
 
-    QLineEdit *fields[] = {
-        idTechnicien,
-        nom,
-        prenom,
-        email,
-        telephone,
-        formation,
-        specialite
+// ============================================================
+// BARRE D'ACTIONS (CRUD + recherche / tri / export)
+// ============================================================
+
+QWidget *Technicienne::setupActionBar()
+{
+    QGroupBox *box = new QGroupBox(QString::fromUtf8("⚡   Actions"));
+
+    QHBoxLayout *layout = new QHBoxLayout(box);
+    layout->setContentsMargins(20, 22, 20, 14);
+    layout->setSpacing(10);
+
+    btnAjouter = new QPushButton("+  Ajouter");
+    btnAjouter->setObjectName("primaryButton");
+
+    btnModifier = new QPushButton("Modifier");
+
+    btnSupprimer = new QPushButton("Supprimer");
+    btnSupprimer->setObjectName("deleteButton");
+
+    btnVider = new QPushButton("Vider");
+
+    recherche = new QLineEdit;
+    recherche->setPlaceholderText("Rechercher un technicien...");
+    recherche->setMinimumWidth(220);
+
+    btnRechercher = new QPushButton("Rechercher");
+
+    triCombo = new QComboBox;
+    triCombo->addItem("ID");
+    triCombo->addItem("Nom");
+    triCombo->addItem("Prénom");
+    triCombo->addItem("Expérience");
+    triCombo->addItem("Statut");
+    triCombo->addItem("Date d'intégration");
+
+    btnTrier = new QPushButton("Trier");
+
+    btnExporterPDF = new QPushButton("Exporter PDF");
+
+    layout->addWidget(btnAjouter);
+    layout->addWidget(btnModifier);
+    layout->addWidget(btnSupprimer);
+    layout->addWidget(btnVider);
+    layout->addStretch();
+    layout->addWidget(recherche);
+    layout->addWidget(btnRechercher);
+    layout->addWidget(triCombo);
+    layout->addWidget(btnTrier);
+    layout->addWidget(btnExporterPDF);
+
+    connect(btnAjouter, &QPushButton::clicked,
+            this, [this]() { ajouterTechnicien(); });
+    connect(btnModifier, &QPushButton::clicked,
+            this, [this]() { modifierTechnicien(); });
+    connect(btnSupprimer, &QPushButton::clicked,
+            this, [this]() { supprimerTechnicien(); });
+    connect(btnVider, &QPushButton::clicked,
+            this, [this]() { viderChamps(); });
+    connect(btnRechercher, &QPushButton::clicked,
+            this, [this]() { rechercherTechnicien(); });
+    connect(recherche, &QLineEdit::returnPressed,
+            this, [this]() { rechercherTechnicien(); });
+    connect(btnTrier, &QPushButton::clicked,
+            this, [this]() { trierTechnicien(); });
+    connect(btnExporterPDF, &QPushButton::clicked,
+            this, [this]() { exporterPDF(); });
+
+    return box;
+}
+
+
+// ============================================================
+// TABLE
+// ============================================================
+
+QGroupBox *Technicienne::setupTable()
+{
+    QGroupBox *box = new QGroupBox(QString::fromUtf8("▤   Liste des techniciens"));
+
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(15, 22, 15, 12);
+
+    QLabel *instruction = new QLabel(
+        "Sélectionnez une ligne pour modifier les informations");
+    instruction->setAlignment(Qt::AlignRight);
+    instruction->setStyleSheet("color: #7B8CA5; font-size: 11px;");
+    layout->addWidget(instruction);
+
+    table = new QTableWidget;
+    table->setColumnCount(NB_COLONNES);
+    table->setHorizontalHeaderLabels(
+        QStringList()
+        << "ID" << "Nom" << "Prénom" << "Email" << "Téléphone"
+        << "Formation" << "Expérience" << "Spécialité"
+        << "Compétences" << "Statut" << "Date d'intégration");
+
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setAlternatingRowColors(true);
+    table->verticalHeader()->setVisible(false);
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+
+    table->setColumnWidth(COL_ID, 50);
+    table->setColumnWidth(COL_NOM, 100);
+    table->setColumnWidth(COL_PRENOM, 100);
+    table->setColumnWidth(COL_EMAIL, 170);
+    table->setColumnWidth(COL_TELEPHONE, 95);
+    table->setColumnWidth(COL_FORMATION, 120);
+    table->setColumnWidth(COL_EXPERIENCE, 90);
+    table->setColumnWidth(COL_SPECIALITE, 110);
+    table->setColumnWidth(COL_COMPETENCES, 150);
+    table->setColumnWidth(COL_STATUT, 75);
+
+    layout->addWidget(table);
+
+    connect(table, &QTableWidget::cellClicked,
+            this, &Technicienne::selectionnerTechnicien);
+
+    return box;
+}
+
+
+// ============================================================
+// STATISTIQUES
+// ============================================================
+
+QGroupBox *Technicienne::setupStatistics()
+{
+    QGroupBox *box = new QGroupBox(QString::fromUtf8("◔   Statistiques"));
+
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(15, 25, 15, 15);
+    layout->setSpacing(10);
+
+    statisticsWidget = new TechStatisticsWidget;
+    layout->addWidget(statisticsWidget, 1);
+
+    lblTotal = new QLabel("Total : 0");
+    lblActifs = new QLabel("Actifs : 0");
+    lblInactifs = new QLabel("Inactifs : 0");
+
+    lblTotal->setStyleSheet("font-weight: bold; color: #173B6C;");
+    lblActifs->setStyleSheet("font-weight: bold; color: #16A765;");
+    lblInactifs->setStyleSheet("font-weight: bold; color: #EF4444;");
+
+    layout->addWidget(lblTotal);
+    layout->addWidget(lblActifs);
+    layout->addWidget(lblInactifs);
+    layout->addStretch();
+
+    return box;
+}
+
+
+// ============================================================
+// STYLE
+// ============================================================
+
+void Technicienne::appliquerStyle()
+{
+    const QString style = R"(
+        QMainWindow {
+            background: #F4F7FB;
+        }
+
+        QWidget {
+            font-family: 'Segoe UI', Arial;
+            font-size: 13px;
+            color: #173B6C;
+        }
+
+        #sidebar {
+            background: #174481;
+        }
+
+        #sideButton,
+        #sideButtonActive {
+            border: none;
+            border-radius: 7px;
+            padding: 14px 12px;
+            text-align: left;
+            font-size: 15px;
+        }
+
+        #sideButton {
+            background: transparent;
+            color: white;
+        }
+
+        #sideButton:hover {
+            background: #24589A;
+        }
+
+        #sideButtonActive {
+            background: #2E7BD6;
+            color: white;
+            font-weight: bold;
+        }
+
+        #header {
+            background: #287ACB;
+            border-bottom-left-radius: 2px;
+            border-bottom-right-radius: 2px;
+        }
+
+        #headerTitle {
+            color: white;
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        #headerSubtitle {
+            color: #E5F1FF;
+            font-size: 12px;
+        }
+
+        QGroupBox {
+            background: white;
+            border: 1px solid #D5E1EF;
+            border-radius: 9px;
+            margin-top: 5px;
+            font-weight: bold;
+            font-size: 16px;
+            color: #173B6C;
+        }
+
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 14px;
+            padding: 0 7px;
+            background: white;
+        }
+
+        QLineEdit,
+        QSpinBox,
+        QDateEdit,
+        QComboBox,
+        QTextEdit {
+            background: white;
+            border: 1px solid #C9D8E9;
+            border-radius: 6px;
+            padding: 6px;
+            min-height: 18px;
+        }
+
+        QLineEdit:focus,
+        QSpinBox:focus,
+        QDateEdit:focus,
+        QComboBox:focus,
+        QTextEdit:focus {
+            border: 2px solid #287ACB;
+        }
+
+        QPushButton {
+            background: white;
+            color: #173B6C;
+            border: 1px solid #C7D7E9;
+            border-radius: 6px;
+            padding: 9px 15px;
+            min-height: 20px;
+        }
+
+        QPushButton:hover {
+            background: #EEF6FF;
+            border-color: #287ACB;
+        }
+
+        #primaryButton {
+            background: #246FD0;
+            color: white;
+            border: none;
+            font-weight: bold;
+        }
+
+        #primaryButton:hover {
+            background: #195FB9;
+        }
+
+        #deleteButton {
+            color: #E53935;
+        }
+
+        #sideButton:hover {
+            background: #24589A;
+            border: none;
+        }
+
+        QTableWidget {
+            background: white;
+            border: 1px solid #D5E1EF;
+            gridline-color: #E0E7EF;
+            selection-background-color: #DCEEFF;
+            selection-color: #173B6C;
+            alternate-background-color: #F8FAFD;
+        }
+
+        QHeaderView::section {
+            background: #EDF3F9;
+            color: #173B6C;
+            font-weight: bold;
+            border: none;
+            border-right: 1px solid #DCE5EF;
+            border-bottom: 1px solid #DCE5EF;
+            padding: 9px;
+        }
+
+        QTableWidget::item {
+            padding: 6px;
+        }
+    )";
+
+    setStyleSheet(style);
+}
+
+
+// ============================================================
+// DONNEES DE DEMONSTRATION
+// ============================================================
+
+void Technicienne::chargerDonneesDemo()
+{
+    struct Demo
+    {
+        int id;
+        const char *nom;
+        const char *prenom;
+        const char *email;
+        const char *tel;
+        const char *formation;
+        int exp;
+        const char *specialite;
+        const char *competences;
+        int statut;          // 0 = Actif, 1 = Inactif
+        int annee, mois, jour;
     };
 
+    const Demo demo[] = {
+        { 1, "Ben Ali", "Sami", "sami.benali@smartweather.tn", "20123456",
+         "Licence en électronique", 5, "Capteurs",
+         "Étalonnage, maintenance préventive", 0, 2021, 3, 15 },
 
-    for (QLineEdit *field : fields)
+        { 2, "Trabelsi", "Amira", "amira.trabelsi@smartweather.tn", "98234567",
+         "Master en télécommunications", 8, "Réseaux",
+         "Transmission de données, configuration", 0, 2018, 9, 1 },
+
+        { 3, "Gharbi", "Walid", "walid.gharbi@smartweather.tn", "55345678",
+         "Technicien supérieur", 3, "Électricité",
+         "Câblage, alimentation solaire", 1, 2022, 1, 20 },
+
+        { 4, "Mansouri", "Rim", "rim.mansouri@smartweather.tn", "22456789",
+         "Ingénieur en mécatronique", 6, "Automatisme",
+         "Diagnostic, programmation", 0, 2020, 6, 10 }
+    };
+
+    const int n = static_cast<int>(sizeof(demo) / sizeof(demo[0]));
+
+    for (int i = 0; i < n; ++i)
     {
-        field->setMinimumHeight(34);
+        const Demo &d = demo[i];
+
+        idTechnicien->setText(QString::number(d.id));
+        nom->setText(QString::fromUtf8(d.nom));
+        prenom->setText(QString::fromUtf8(d.prenom));
+        email->setText(QString::fromUtf8(d.email));
+        telephone->setText(QString::fromUtf8(d.tel));
+        formation->setText(QString::fromUtf8(d.formation));
+        experience->setValue(d.exp);
+        specialite->setText(QString::fromUtf8(d.specialite));
+        competences->setPlainText(QString::fromUtf8(d.competences));
+        statut->setCurrentIndex(d.statut);
+        dateIntegration->setDate(QDate(d.annee, d.mois, d.jour));
+
+        const int row = table->rowCount();
+        table->insertRow(row);
+        remplirLigne(row);
     }
-
-    statut->setMinimumHeight(34);
-    experience->setMinimumHeight(34);
-    dateIntegration->setMinimumHeight(34);
-}
-
-
-// =====================================================
-// STATISTIQUES
-// =====================================================
-
-void Technicienne::setupStatistics()
-{
-    // Les statistiques sont créées dans setupUI()
-}
-
-
-// =====================================================
-// TABLE
-// =====================================================
-
-void Technicienne::setupTable()
-{
-    table = new QTableWidget();
-
-    table->setColumnCount(11);
-
-    table->setHorizontalHeaderLabels({
-        "ID Technicien",
-        "Nom",
-        "Prénom",
-        "Email",
-        "Téléphone",
-        "Formation",
-        "Expérience",
-        "Spécialité",
-        "Compétences",
-        "Statut",
-        "Date intégration"
-    });
-
-
-    table->setSelectionBehavior(
-        QAbstractItemView::SelectRows
-        );
-
-    table->setSelectionMode(
-        QAbstractItemView::SingleSelection
-        );
-
-    table->setEditTriggers(
-        QAbstractItemView::NoEditTriggers
-        );
-
-    table->setAlternatingRowColors(true);
-
-    table->verticalHeader()->setVisible(false);
-
-    table->horizontalHeader()->setStretchLastSection(true);
-
-    table->horizontalHeader()->setSectionResizeMode(
-        QHeaderView::Interactive
-        );
-
-    table->setRowHeight(0, 30);
-
-
-    // Largeurs
-
-    table->setColumnWidth(0, 100);
-    table->setColumnWidth(1, 105);
-    table->setColumnWidth(2, 105);
-    table->setColumnWidth(3, 190);
-    table->setColumnWidth(4, 110);
-    table->setColumnWidth(5, 130);
-    table->setColumnWidth(6, 90);
-    table->setColumnWidth(7, 130);
-    table->setColumnWidth(8, 220);
-    table->setColumnWidth(9, 90);
-    table->setColumnWidth(10, 120);
-}
-
-
-// =====================================================
-// METIERS
-// =====================================================
-
-// =====================================================
-// AJOUTER
-// =====================================================
-
-void Technicienne::ajouterTechnicien()
-{
-    if (idTechnicien->text().isEmpty() ||
-        nom->text().isEmpty() ||
-        prenom->text().isEmpty())
-    {
-        QMessageBox::warning(
-            this,
-            "Attention",
-            "Veuillez remplir au minimum l'ID, le nom et le prénom."
-            );
-
-        return;
-    }
-
-
-    int row = table->rowCount();
-
-    table->insertRow(row);
-
-
-    table->setItem(
-        row, 0,
-        new QTableWidgetItem(
-            idTechnicien->text()
-            )
-        );
-
-    table->setItem(
-        row, 1,
-        new QTableWidgetItem(
-            nom->text()
-            )
-        );
-
-    table->setItem(
-        row, 2,
-        new QTableWidgetItem(
-            prenom->text()
-            )
-        );
-
-    table->setItem(
-        row, 3,
-        new QTableWidgetItem(
-            email->text()
-            )
-        );
-
-    table->setItem(
-        row, 4,
-        new QTableWidgetItem(
-            telephone->text()
-            )
-        );
-
-    table->setItem(
-        row, 5,
-        new QTableWidgetItem(
-            formation->text()
-            )
-        );
-
-    table->setItem(
-        row, 6,
-        new QTableWidgetItem(
-            QString::number(
-                experience->value()
-                )
-            )
-        );
-
-    table->setItem(
-        row, 7,
-        new QTableWidgetItem(
-            specialite->text()
-            )
-        );
-
-    table->setItem(
-        row, 8,
-        new QTableWidgetItem(
-            competences->toPlainText()
-            )
-        );
-
-    table->setItem(
-        row, 9,
-        new QTableWidgetItem(
-            statut->currentText()
-            )
-        );
-
-    table->setItem(
-        row, 10,
-        new QTableWidgetItem(
-            dateIntegration->date().toString(
-                "dd/MM/yyyy"
-                )
-            )
-        );
-
-
-    updateStatistics();
-
-    QMessageBox::information(
-        this,
-        "Ajout",
-        "Technicien ajouté avec succès."
-        );
 
     viderChamps();
 }
 
 
-// =====================================================
-// MODIFIER
-// =====================================================
+// ============================================================
+// UTILITAIRES
+// ============================================================
+
+int Technicienne::trouverLigneParId(int id) const
+{
+    for (int r = 0; r < table->rowCount(); ++r)
+    {
+        const QTableWidgetItem *it = table->item(r, COL_ID);
+
+        if (it && it->data(Qt::DisplayRole).toInt() == id)
+            return r;
+    }
+
+    return -1;
+}
+
+
+bool Technicienne::validerChamps(int ligneIgnoree)
+{
+    bool ok = false;
+    const int id = idTechnicien->text().trimmed().toInt(&ok);
+
+    if (!ok || id <= 0)
+    {
+        QMessageBox::warning(this, "Erreur",
+                             "L'ID doit être un nombre entier positif.");
+        idTechnicien->setFocus();
+        return false;
+    }
+
+    const int existante = trouverLigneParId(id);
+
+    if (existante != -1 && existante != ligneIgnoree)
+    {
+        QMessageBox::warning(this, "Erreur",
+                             "Cet ID existe déjà. Veuillez en choisir un autre.");
+        idTechnicien->setFocus();
+        return false;
+    }
+
+    if (nom->text().trimmed().isEmpty())
+    {
+        QMessageBox::warning(this, "Erreur", "Le nom est obligatoire.");
+        nom->setFocus();
+        return false;
+    }
+
+    if (prenom->text().trimmed().isEmpty())
+    {
+        QMessageBox::warning(this, "Erreur", "Le prénom est obligatoire.");
+        prenom->setFocus();
+        return false;
+    }
+
+    const QRegularExpression emailRegex(
+        "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+
+    if (!emailRegex.match(email->text().trimmed()).hasMatch())
+    {
+        QMessageBox::warning(this, "Erreur", "L'adresse email n'est pas valide.");
+        email->setFocus();
+        return false;
+    }
+
+    const QRegularExpression telRegex("^[0-9]{8}$");
+
+    if (!telRegex.match(telephone->text().trimmed()).hasMatch())
+    {
+        QMessageBox::warning(this, "Erreur",
+                             "Le téléphone doit contenir exactement 8 chiffres.");
+        telephone->setFocus();
+        return false;
+    }
+
+    if (formation->text().trimmed().isEmpty())
+    {
+        QMessageBox::warning(this, "Erreur", "La formation est obligatoire.");
+        formation->setFocus();
+        return false;
+    }
+
+    if (specialite->text().trimmed().isEmpty())
+    {
+        QMessageBox::warning(this, "Erreur", "La spécialité est obligatoire.");
+        specialite->setFocus();
+        return false;
+    }
+
+    return true;
+}
+
+
+void Technicienne::remplirLigne(int row)
+{
+    // ID et expérience stockés comme nombres (tri numérique correct)
+    QTableWidgetItem *itemId = new QTableWidgetItem;
+    itemId->setData(Qt::DisplayRole, idTechnicien->text().trimmed().toInt());
+
+    QTableWidgetItem *itemExp = new QTableWidgetItem;
+    itemExp->setData(Qt::DisplayRole, experience->value());
+
+    // La date est stockée comme QDate (tri chronologique correct)
+    QTableWidgetItem *itemDate = new QTableWidgetItem;
+    itemDate->setData(Qt::DisplayRole, dateIntegration->date());
+
+    QTableWidgetItem *itemStatut = new QTableWidgetItem(statut->currentText());
+    itemStatut->setForeground(
+        statut->currentText() == "Actif" ? QColor("#16A765") : QColor("#EF4444"));
+
+    table->setItem(row, COL_ID, itemId);
+    table->setItem(row, COL_NOM, new QTableWidgetItem(nom->text().trimmed()));
+    table->setItem(row, COL_PRENOM, new QTableWidgetItem(prenom->text().trimmed()));
+    table->setItem(row, COL_EMAIL, new QTableWidgetItem(email->text().trimmed()));
+    table->setItem(row, COL_TELEPHONE, new QTableWidgetItem(telephone->text().trimmed()));
+    table->setItem(row, COL_FORMATION, new QTableWidgetItem(formation->text().trimmed()));
+    table->setItem(row, COL_EXPERIENCE, itemExp);
+    table->setItem(row, COL_SPECIALITE, new QTableWidgetItem(specialite->text().trimmed()));
+    table->setItem(row, COL_COMPETENCES,
+                   new QTableWidgetItem(
+                       competences->toPlainText().simplified()));
+    table->setItem(row, COL_STATUT, itemStatut);
+    table->setItem(row, COL_DATE, itemDate);
+}
+
+
+// ============================================================
+// ACTIONS CRUD
+// ============================================================
+
+void Technicienne::ajouterTechnicien()
+{
+    if (!validerChamps(-1))
+        return;
+
+    const int row = table->rowCount();
+    table->insertRow(row);
+    remplirLigne(row);
+
+    updateStatistics();
+    viderChamps();
+
+    QMessageBox::information(this, "Succès",
+                             "Le technicien a été ajouté avec succès.");
+}
+
 
 void Technicienne::modifierTechnicien()
 {
-    int row =
-        table->currentRow();
+    const int row = table->currentRow();
 
     if (row < 0)
     {
-        QMessageBox::warning(
-            this,
-            "Attention",
-            "Sélectionnez un technicien dans la liste."
-            );
-
+        QMessageBox::warning(this, "Modification",
+                             "Veuillez sélectionner un technicien dans la liste.");
         return;
     }
 
+    if (!validerChamps(row))
+        return;
 
-    table->item(row, 0)->setText(
-        idTechnicien->text()
-        );
-
-    table->item(row, 1)->setText(
-        nom->text()
-        );
-
-    table->item(row, 2)->setText(
-        prenom->text()
-        );
-
-    table->item(row, 3)->setText(
-        email->text()
-        );
-
-    table->item(row, 4)->setText(
-        telephone->text()
-        );
-
-    table->item(row, 5)->setText(
-        formation->text()
-        );
-
-    table->item(row, 6)->setText(
-        QString::number(
-            experience->value()
-            )
-        );
-
-    table->item(row, 7)->setText(
-        specialite->text()
-        );
-
-    table->item(row, 8)->setText(
-        competences->toPlainText()
-        );
-
-    table->item(row, 9)->setText(
-        statut->currentText()
-        );
-
-    table->item(row, 10)->setText(
-        dateIntegration->date().toString(
-            "dd/MM/yyyy"
-            )
-        );
-
-
+    remplirLigne(row);
     updateStatistics();
 
-    QMessageBox::information(
-        this,
-        "Modification",
-        "Technicien modifié avec succès."
-        );
+    QMessageBox::information(this, "Succès",
+                             "Le technicien a été modifié avec succès.");
 }
 
-
-// =====================================================
-// SUPPRIMER
-// =====================================================
 
 void Technicienne::supprimerTechnicien()
 {
-    int row =
-        table->currentRow();
+    const int row = table->currentRow();
 
     if (row < 0)
     {
-        QMessageBox::warning(
-            this,
-            "Attention",
-            "Sélectionnez un technicien."
-            );
-
+        QMessageBox::warning(this, "Suppression",
+                             "Veuillez sélectionner un technicien dans la liste.");
         return;
     }
 
+    const QMessageBox::StandardButton reponse = QMessageBox::question(
+        this,
+        "Confirmation",
+        "Voulez-vous vraiment supprimer ce technicien ?",
+        QMessageBox::Yes | QMessageBox::No);
 
-    QMessageBox::StandardButton answer =
-        QMessageBox::question(
-            this,
-            "Confirmation",
-            "Voulez-vous supprimer ce technicien ?"
-            );
+    if (reponse != QMessageBox::Yes)
+        return;
 
+    table->removeRow(row);
 
-    if (answer ==
-        QMessageBox::Yes)
-    {
-        table->removeRow(row);
-
-        updateStatistics();
-
-        viderChamps();
-    }
+    updateStatistics();
+    viderChamps();
 }
 
-
-// =====================================================
-// VIDER
-// =====================================================
 
 void Technicienne::viderChamps()
 {
@@ -1401,670 +1104,200 @@ void Technicienne::viderChamps()
     telephone->clear();
     formation->clear();
     specialite->clear();
-
-    experience->setValue(0);
-
     competences->clear();
 
+    experience->setValue(0);
     statut->setCurrentIndex(0);
-
-    dateIntegration->setDate(
-        QDate::currentDate()
-        );
+    dateIntegration->setDate(QDate::currentDate());
 
     table->clearSelection();
+    table->setCurrentCell(-1, -1);
 }
 
 
-// =====================================================
-// RECHERCHER
-// =====================================================
-
-void Technicienne::rechercherTechnicien()
-{
-    QString text =
-        recherche->text()
-            .trimmed()
-            .toLower();
-
-
-    for (int row = 0;
-         row < table->rowCount();
-         row++)
-    {
-        bool found = false;
-
-
-        for (int column = 0;
-             column < table->columnCount();
-             column++)
-        {
-            QTableWidgetItem *item =
-                table->item(row, column);
-
-            if (item &&
-                item->text()
-                    .toLower()
-                    .contains(text))
-            {
-                found = true;
-                break;
-            }
-        }
-
-
-        table->setRowHidden(
-            row,
-            !found
-            );
-    }
-}
-
-
-// =====================================================
-// TRIER
-// =====================================================
-
-void Technicienne::trierTechnicien()
-{
-    int column = 1;
-
-
-    QString value =
-        triCombo->currentText();
-
-
-    if (value == "Nom")
-        column = 1;
-
-    else if (value == "Prénom")
-        column = 2;
-
-    else if (value == "Expérience")
-        column = 6;
-
-    else if (value == "Spécialité")
-        column = 7;
-
-    else if (value == "Statut")
-        column = 9;
-
-
-    table->sortItems(
-        column,
-        Qt::AscendingOrder
-        );
-}
-
-
-// =====================================================
-// IMPORTER CV
-// =====================================================
-
-void Technicienne::exporterPDF()
-{
-    const QString defaultPath =
-        QDir::homePath() + "/liste_techniciens.pdf";
-
-    QString fileName = QFileDialog::getSaveFileName(
-        this,
-        "Exporter la liste des techniciens en PDF",
-        defaultPath,
-        "Fichiers PDF (*.pdf)"
-    );
-
-    if (fileName.isEmpty())
-        return;
-
-    if (!fileName.endsWith(".pdf", Qt::CaseInsensitive))
-        fileName += ".pdf";
-
-    QPrinter printer(QPrinter::HighResolution);
-    printer.setOutputFormat(QPrinter::PdfFormat);
-    printer.setOutputFileName(fileName);
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    printer.setPageSize(QPageSize(QPageSize::A4));
-    printer.setPageOrientation(QPageLayout::Landscape);
-#else
-    printer.setPaperSize(QPrinter::A4);
-    printer.setOrientation(QPrinter::Landscape);
-#endif
-
-    printer.setFullPage(false);
-    printer.setDocName("Liste des techniciens");
-
-    // Calcul des statistiques au moment de l'export.
-    int actifsCount = 0;
-    int inactifsCount = 0;
-    int formationCount = 0;
-
-    for (int row = 0; row < table->rowCount(); ++row)
-    {
-        if (table->isRowHidden(row))
-            continue;
-
-        QTableWidgetItem *statusItem = table->item(row, 9);
-        if (!statusItem)
-            continue;
-
-        const QString status = statusItem->text().trimmed();
-        if (status == "Actif")
-            ++actifsCount;
-        else if (status == "Inactif")
-            ++inactifsCount;
-        else if (status == "En formation")
-            ++formationCount;
-    }
-
-    QString html;
-    html += R"(
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        color: #173F73;
-        font-size: 8pt;
-    }
-    h1 {
-        color: #17467D;
-        font-size: 18pt;
-        margin-bottom: 3px;
-    }
-    .subtitle {
-        color: #5F7895;
-        font-size: 9pt;
-        margin-bottom: 10px;
-    }
-    .summary {
-        background: #F0F5FB;
-        border: 1px solid #D5E1EF;
-        padding: 7px;
-        margin: 8px 0 12px 0;
-        font-size: 8pt;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-    }
-    th {
-        background: #17467D;
-        color: #FFFFFF;
-        font-weight: bold;
-        border: 1px solid #CBD8E6;
-        padding: 4px 3px;
-        font-size: 6.5pt;
-    }
-    td {
-        border: 1px solid #CFDAE5;
-        padding: 4px 3px;
-        font-size: 6.5pt;
-        word-wrap: break-word;
-    }
-    tr:nth-child(even) td {
-        background: #F6F9FC;
-    }
-    .footer {
-        color: #6B8198;
-        font-size: 7pt;
-        margin-top: 10px;
-    }
-</style>
-</head>
-<body>
-)";
-
-    html += "<h1>Liste des techniciens</h1>";
-    html += "<div class='subtitle'>Smart Weather Management — Rapport exporté le ";
-    html += QDateTime::currentDateTime().toString("dd/MM/yyyy à HH:mm").toHtmlEscaped();
-    html += "</div>";
-
-    html += "<div class='summary'>";
-    html += QString("Techniciens affichés : <b>%1</b> &nbsp; | &nbsp; "
-                    "Actifs : <b>%2</b> &nbsp; | &nbsp; "
-                    "Inactifs : <b>%3</b> &nbsp; | &nbsp; "
-                    "En formation : <b>%4</b>")
-                .arg(table->rowCount() - [&]() {
-                    int hiddenCount = 0;
-                    for (int r = 0; r < table->rowCount(); ++r)
-                        if (table->isRowHidden(r)) ++hiddenCount;
-                    return hiddenCount;
-                }())
-                .arg(actifsCount)
-                .arg(inactifsCount)
-                .arg(formationCount);
-    html += "</div>";
-
-    html += "<table><thead><tr>";
-    for (int col = 0; col < table->columnCount(); ++col)
-    {
-        QTableWidgetItem *headerItem = table->horizontalHeaderItem(col);
-        const QString label = headerItem ? headerItem->text() : QString();
-        html += "<th>" + label.toHtmlEscaped() + "</th>";
-    }
-    html += "</tr></thead><tbody>";
-
-    int exportedRows = 0;
-    for (int row = 0; row < table->rowCount(); ++row)
-    {
-        // Respecte le filtre de recherche visible à l'écran.
-        if (table->isRowHidden(row))
-            continue;
-
-        html += "<tr>";
-        for (int col = 0; col < table->columnCount(); ++col)
-        {
-            QTableWidgetItem *item = table->item(row, col);
-            const QString value = item ? item->text() : QString();
-            html += "<td>" + value.toHtmlEscaped() + "</td>";
-        }
-        html += "</tr>";
-        ++exportedRows;
-    }
-
-    if (exportedRows == 0)
-    {
-        html += "<tr><td colspan='" +
-                QString::number(table->columnCount()) +
-                "'>Aucun technicien à exporter.</td></tr>";
-    }
-
-    html += "</tbody></table>";
-    html += "<div class='footer'>Document généré automatiquement par Smart Weather Management.</div>";
-    html += "</body></html>";
-
-    QTextDocument document;
-    document.setDefaultFont(QFont("Arial", 8));
-    document.setHtml(html);
-    document.setPageSize(printer.pageRect(QPrinter::Point).size());
-    document.print(&printer);
-
-    QMessageBox::information(
-        this,
-        "Export PDF",
-        QString("Le rapport PDF a été créé avec succès :\n%1")
-            .arg(QDir::toNativeSeparators(fileName))
-    );
-}
-
-
-// =====================================================
-// SELECTION TABLE
-// =====================================================
-
-void Technicienne::selectionnerTechnicien(
-    int row,
-    int column
-    )
+void Technicienne::selectionnerTechnicien(int row, int column)
 {
     Q_UNUSED(column);
 
-
-    if (row < 0)
+    if (row < 0 || row >= table->rowCount())
         return;
 
+    const QTableWidgetItem *itemId = table->item(row, COL_ID);
+    if (!itemId)
+        return;
 
-    idTechnicien->setText(
-        table->item(row, 0)->text()
-        );
+    idTechnicien->setText(QString::number(itemId->data(Qt::DisplayRole).toInt()));
+    nom->setText(texteCellule(table, row, COL_NOM));
+    prenom->setText(texteCellule(table, row, COL_PRENOM));
+    email->setText(texteCellule(table, row, COL_EMAIL));
+    telephone->setText(texteCellule(table, row, COL_TELEPHONE));
+    formation->setText(texteCellule(table, row, COL_FORMATION));
+    specialite->setText(texteCellule(table, row, COL_SPECIALITE));
+    competences->setPlainText(texteCellule(table, row, COL_COMPETENCES));
 
-    nom->setText(
-        table->item(row, 1)->text()
-        );
+    const QTableWidgetItem *itemExp = table->item(row, COL_EXPERIENCE);
+    if (itemExp)
+        experience->setValue(itemExp->data(Qt::DisplayRole).toInt());
 
-    prenom->setText(
-        table->item(row, 2)->text()
-        );
+    const int indexStatut = statut->findText(texteCellule(table, row, COL_STATUT));
+    statut->setCurrentIndex(indexStatut >= 0 ? indexStatut : 0);
 
-    email->setText(
-        table->item(row, 3)->text()
-        );
-
-    telephone->setText(
-        table->item(row, 4)->text()
-        );
-
-    formation->setText(
-        table->item(row, 5)->text()
-        );
-
-    experience->setValue(
-        table->item(row, 6)->text().toInt()
-        );
-
-    specialite->setText(
-        table->item(row, 7)->text()
-        );
-
-    competences->setPlainText(
-        table->item(row, 8)->text()
-        );
-
-
-    int statusIndex =
-        statut->findText(
-            table->item(row, 9)->text()
-            );
-
-    if (statusIndex >= 0)
-        statut->setCurrentIndex(
-            statusIndex
-            );
-
-
-    dateIntegration->setDate(
-        QDate::fromString(
-            table->item(row, 10)->text(),
-            "dd/MM/yyyy"
-            )
-        );
+    const QTableWidgetItem *itemDate = table->item(row, COL_DATE);
+    if (itemDate)
+        dateIntegration->setDate(itemDate->data(Qt::DisplayRole).toDate());
 }
 
 
-// =====================================================
+// ============================================================
+// RECHERCHE / TRI / EXPORT PDF
+// ============================================================
+
+void Technicienne::rechercherTechnicien()
+{
+    const QString critere = recherche->text().trimmed();
+
+    int trouves = 0;
+
+    for (int r = 0; r < table->rowCount(); ++r)
+    {
+        bool visible = critere.isEmpty();
+
+        if (!visible)
+        {
+            for (int c = 0; c < table->columnCount(); ++c)
+            {
+                if (texteCellule(table, r, c).contains(critere, Qt::CaseInsensitive))
+                {
+                    visible = true;
+                    break;
+                }
+            }
+        }
+
+        table->setRowHidden(r, !visible);
+
+        if (visible)
+            ++trouves;
+    }
+
+    if (!critere.isEmpty() && trouves == 0)
+    {
+        QMessageBox::information(this, "Recherche",
+                                 "Aucun technicien ne correspond à votre recherche.");
+    }
+}
+
+
+void Technicienne::trierTechnicien()
+{
+    int colonne = COL_ID;
+
+    switch (triCombo->currentIndex())
+    {
+    case 0: colonne = COL_ID;         break;
+    case 1: colonne = COL_NOM;        break;
+    case 2: colonne = COL_PRENOM;     break;
+    case 3: colonne = COL_EXPERIENCE; break;
+    case 4: colonne = COL_STATUT;     break;
+    case 5: colonne = COL_DATE;       break;
+    default: break;
+    }
+
+    table->sortItems(colonne, Qt::AscendingOrder);
+}
+
+
+void Technicienne::exporterPDF()
+{
+    if (table->rowCount() == 0)
+    {
+        QMessageBox::information(this, "Export PDF",
+                                 "Aucun technicien à exporter.");
+        return;
+    }
+
+    QString chemin = QFileDialog::getSaveFileName(
+        this,
+        "Exporter la liste des techniciens",
+        "techniciens.pdf",
+        "Fichiers PDF (*.pdf)");
+
+    if (chemin.isEmpty())
+        return;
+
+    if (!chemin.endsWith(".pdf", Qt::CaseInsensitive))
+        chemin += ".pdf";
+
+    QString html;
+    html += "<h2 style='color:#174481;'>Liste des techniciens</h2>";
+    html += "<p>Date : " + QDate::currentDate().toString("dd/MM/yyyy") + "</p>";
+    html += "<table border='1' cellspacing='0' cellpadding='4' width='100%'>";
+    html += "<tr style='background-color:#EDF3F9;'>";
+
+    const int colonnesPdf[] = { COL_ID, COL_NOM, COL_PRENOM, COL_EMAIL,
+                               COL_TELEPHONE, COL_SPECIALITE, COL_EXPERIENCE,
+                               COL_STATUT, COL_DATE };
+    const int nbColonnesPdf = static_cast<int>(sizeof(colonnesPdf) / sizeof(colonnesPdf[0]));
+
+    for (int i = 0; i < nbColonnesPdf; ++i)
+    {
+        const QTableWidgetItem *entete =
+            table->horizontalHeaderItem(colonnesPdf[i]);
+
+        html += "<th>" + (entete ? entete->text().toHtmlEscaped() : QString()) + "</th>";
+    }
+
+    html += "</tr>";
+
+    for (int r = 0; r < table->rowCount(); ++r)
+    {
+        if (table->isRowHidden(r))
+            continue;
+
+        html += "<tr>";
+
+        for (int i = 0; i < nbColonnesPdf; ++i)
+            html += "<td>" + texteCellule(table, r, colonnesPdf[i]).toHtmlEscaped() + "</td>";
+
+        html += "</tr>";
+    }
+
+    html += "</table>";
+
+    QTextDocument document;
+    document.setHtml(html);
+
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(chemin);
+
+    document.print(&printer);
+
+    QMessageBox::information(this, "Export PDF",
+                             "Le fichier PDF a été créé avec succès :\n" + chemin);
+}
+
+
+// ============================================================
 // STATISTIQUES
-// =====================================================
+// ============================================================
 
 void Technicienne::updateStatistics()
 {
-    int actifsCount = 0;
-    int inactifsCount = 0;
+    int actifs = 0;
+    int inactifs = 0;
 
-
-    for (int row = 0;
-         row < table->rowCount();
-         row++)
+    for (int r = 0; r < table->rowCount(); ++r)
     {
-        QTableWidgetItem *item =
-            table->item(row, 9);
-
-
-        if (!item)
-            continue;
-
-
-        if (item->text() == "Actif")
-            actifsCount++;
-
-        else if (item->text() == "Inactif")
-            inactifsCount++;
+        if (texteCellule(table, r, COL_STATUT) == "Actif")
+            ++actifs;
+        else
+            ++inactifs;
     }
 
-
-    statisticsWidget->setStatistics(
-        actifsCount,
-        inactifsCount
-        );
-}
-
-
-// =====================================================
-// STYLE GRAPHIQUE
-// =====================================================
-
-void Technicienne::appliquerStyle()
-{
-    setStyleSheet(R"(
-
-        * {
-            font-family: "Segoe UI";
-            font-size: 13px;
-        }
-
-
-        QMainWindow {
-            background: #F4F7FB;
-        }
-
-
-        /* =========================
-           SIDEBAR
-           ========================= */
-
-        #sidebar {
-            background: #17467D;
-        }
-
-
-        #logoIcon {
-            color: #FFD21F;
-            font-size: 40px;
-            font-weight: bold;
-        }
-
-
-        #logoText {
-            color: white;
-            font-size: 17px;
-            font-weight: bold;
-        }
-
-
-        #sideButton,
-        #sideButtonSelected {
-            border: none;
-            border-radius: 7px;
-            text-align: left;
-            padding-left: 18px;
-            color: white;
-            font-size: 14px;
-            background: transparent;
-        }
-
-
-        #sideButton:hover {
-            background: #2468B4;
-        }
-
-
-        #sideButtonSelected {
-            background: #287ED1;
-            font-weight: bold;
-        }
-
-
-        #sidebarBottom {
-            color: white;
-            font-size: 12px;
-        }
-
-
-        /* =========================
-           HEADER
-           ========================= */
-
-        #pageTitle {
-            color: #FFFFFF;
-            background: transparent;
-            font-size: 26px;
-            font-weight: bold;
-            padding: 0px;
-        }
-
-
-        #pageSubtitle {
-            color: #E5F0FF;
-            background: transparent;
-            font-size: 13px;
-        }
-
-
-        #headerInfo {
-            color: white;
-            background: transparent;
-            font-size: 13px;
-        }
-
-
-        /* =========================
-           CARDS
-           ========================= */
-
-        #card {
-            background: white;
-            border: 1px solid #D5E1EF;
-            border-radius: 8px;
-        }
-
-
-        #sectionTitle {
-            color: #123E70;
-            font-size: 15px;
-            font-weight: bold;
-            padding: 2px;
-        }
-
-
-        QLabel {
-            color: #173F73;
-        }
-
-
-        /* =========================
-           INPUTS
-           ========================= */
-
-        QLineEdit,
-        QComboBox,
-        QSpinBox,
-        QDateEdit,
-        QTextEdit {
-            background: white;
-            border: 1px solid #BFD3E8;
-            border-radius: 5px;
-            padding: 6px;
-            color: #173F73;
-        }
-
-
-        QLineEdit:focus,
-        QComboBox:focus,
-        QSpinBox:focus,
-        QDateEdit:focus,
-        QTextEdit:focus {
-            border: 2px solid #287ED1;
-        }
-
-
-        /* =========================
-           BOUTONS
-           ========================= */
-
-        QPushButton {
-            border-radius: 5px;
-            padding: 8px 15px;
-            border: 1px solid #C5D6E8;
-            background: white;
-            color: #173F73;
-        }
-
-
-        QPushButton:hover {
-            background: #EEF6FF;
-        }
-
-
-        #btnAdd {
-            background: #287ED1;
-            color: white;
-            border: none;
-            font-weight: bold;
-        }
-
-
-        #btnAdd:hover {
-            background: #1768B7;
-        }
-
-
-        #btnModify {
-            background: white;
-            color: #173F73;
-        }
-
-
-        #btnDelete {
-            background: white;
-            color: #D83434;
-        }
-
-
-        #btnClear {
-            background: white;
-            color: #173F73;
-        }
-/* =========================
-           TABLE
-           ========================= */
-
-        QTableWidget {
-            background: white;
-            alternate-background-color: #F7FAFD;
-            border: 1px solid #D6E2EF;
-            gridline-color: #DDE7F0;
-            color: #173F73;
-            selection-background-color: #DCEEFF;
-            selection-color: #123E70;
-        }
-
-
-        QHeaderView::section {
-            background: #EDF3FA;
-            color: #173F73;
-            font-weight: bold;
-            border: none;
-            border-right: 1px solid #D5E1EF;
-            padding: 7px;
-        }
-
-
-        QTableWidget::item {
-            padding: 5px;
-        }
-
-
-        /* =========================
-           COMBO
-           ========================= */
-
-        QComboBox QAbstractItemView {
-            background: white;
-            color: #173F73;
-            selection-background-color: #287ED1;
-            selection-color: white;
-        }
-
-    )");
-
-
-    // =========================
-    // HEADER BLEU
-    // =========================
-
-    QWidget *central =
-        centralWidget();
-
-    if (central)
-    {
-        // On applique le bleu au header
-        QList<QWidget*> children =
-            central->findChildren<QWidget*>();
-
-        for (QWidget *w : children)
-        {
-            if (w->height() == 70 &&
-                w->objectName().isEmpty())
-            {
-                w->setStyleSheet(
-                    "background:#287ED1;"
-                    );
-
-                break;
-            }
-        }
-    }
+    lblTotal->setText(QString("Total : %1").arg(actifs + inactifs));
+    lblActifs->setText(QString("Actifs : %1").arg(actifs));
+    lblInactifs->setText(QString("Inactifs : %1").arg(inactifs));
+
+    statisticsWidget->setStatistics(actifs, inactifs);
 }
