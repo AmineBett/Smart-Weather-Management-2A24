@@ -1,13 +1,18 @@
 #include <QApplication>
 #include <QMainWindow>
+#include <QPushButton>
+#include <QList>
 
 #include "technicienne.h"
-#include "stationwindow.h"
+#include "stationwuindow.h"
+#include "gbureaux.h"
+#include "weatherwisetest.h"
 
-// Affiche la fenêtre "to" à la place de la fenêtre "from"
-// en conservant la position, la taille et l'état maximisé.
 static void basculerFenetre(QMainWindow *from, QMainWindow *to)
 {
+    if (from == nullptr || to == nullptr || from == to)
+        return;
+
     const bool maximisee = from->isMaximized();
 
     if (!maximisee)
@@ -23,8 +28,30 @@ static void basculerFenetre(QMainWindow *from, QMainWindow *to)
 
     to->raise();
     to->activateWindow();
-
     from->hide();
+}
+
+static void connecterNavigation(QMainWindow *from,
+                                QMainWindow *to,
+                                const QString &motCle)
+{
+    const QList<QPushButton *> boutons =
+        from->findChildren<QPushButton *>();
+
+    for (QPushButton *bouton : boutons)
+    {
+        if (bouton->text().contains(motCle, Qt::CaseInsensitive))
+        {
+            QObject::connect(
+                bouton,
+                &QPushButton::clicked,
+                from,
+                [from, to]()
+                {
+                    basculerFenetre(from, to);
+                });
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -34,27 +61,63 @@ int main(int argc, char *argv[])
     QApplication::setStyle("Fusion");
     QApplication::setApplicationName("Smart Weather Management");
 
-    // Les deux modules
     Technicienne fenetreTechniciens;
     StationWindow fenetreStations;
+    GBureaux fenetreBureaux;
+    WeatherWiseTest fenetreEquipements;
 
-    // Technicienne -> clic sur "Gestion des stations"
-    QObject::connect(&fenetreTechniciens, &Technicienne::stationsRequested,
-                     &fenetreTechniciens,
-                     [&fenetreTechniciens, &fenetreStations]()
-                     {
-                         basculerFenetre(&fenetreTechniciens, &fenetreStations);
-                     });
+    // Navigation depuis Techniciens
+    connecterNavigation(&fenetreTechniciens,
+                        &fenetreStations,
+                        "Gestion des stations");
 
-    // Stations -> clic sur "Gestion des techniciens"
-    QObject::connect(&fenetreStations, &StationWindow::techniciansRequested,
-                     &fenetreStations,
-                     [&fenetreTechniciens, &fenetreStations]()
-                     {
-                         basculerFenetre(&fenetreStations, &fenetreTechniciens);
-                     });
+    connecterNavigation(&fenetreTechniciens,
+                        &fenetreBureaux,
+                        "Gestion de bureau");
 
-    // L'interface des techniciens s'affiche en premier
+    connecterNavigation(&fenetreTechniciens,
+                        &fenetreEquipements,
+                        "Gestion des équipements");
+
+    // Navigation depuis Stations
+    connecterNavigation(&fenetreStations,
+                        &fenetreTechniciens,
+                        "Gestion des techniciens");
+
+    connecterNavigation(&fenetreStations,
+                        &fenetreBureaux,
+                        "Gestion de bureau");
+
+    connecterNavigation(&fenetreStations,
+                        &fenetreEquipements,
+                        "Gestion des équipements");
+
+    // Navigation depuis Bureaux
+    connecterNavigation(&fenetreBureaux,
+                        &fenetreTechniciens,
+                        "Gestion des techniciens");
+
+    connecterNavigation(&fenetreBureaux,
+                        &fenetreStations,
+                        "Gestion des stations");
+
+    connecterNavigation(&fenetreBureaux,
+                        &fenetreEquipements,
+                        "Gestion des équipements");
+
+    // Navigation depuis Équipements
+    connecterNavigation(&fenetreEquipements,
+                        &fenetreTechniciens,
+                        "Gestion des techniciens");
+
+    connecterNavigation(&fenetreEquipements,
+                        &fenetreStations,
+                        "Gestion des stations");
+
+    connecterNavigation(&fenetreEquipements,
+                        &fenetreBureaux,
+                        "Gestion de bureau");
+
     fenetreTechniciens.show();
 
     return app.exec();
