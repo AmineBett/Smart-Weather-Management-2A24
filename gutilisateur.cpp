@@ -1,4 +1,7 @@
 #include "gutilisateur.h"
+#include "gbureaux.h"
+#include "technicienne.h"
+#include "stationwindow.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -111,16 +114,30 @@ void Gutilisateur::construireInterface()
     btnStations     = new QPushButton("📡   Gestion des stations");
     btnUtilisateurs = new QPushButton("👤   Gestion des utilisateurs");
 
-    btnUtilisateurs->setCheckable(true);
-    btnUtilisateurs->setChecked(true);
+    groupeMenu = new QButtonGroup(this);
+    groupeMenu->setExclusive(true);
 
-    lm->addWidget(btnDashboard);
-    lm->addWidget(btnBureaux);
-    lm->addWidget(btnEquipements);
-    lm->addWidget(btnTechniciens);
-    lm->addWidget(btnStations);
-    lm->addWidget(btnUtilisateurs);
+    QPushButton *boutonsMenu[6] = { btnDashboard, btnBureaux, btnEquipements,
+                                    btnTechniciens, btnStations, btnUtilisateurs };
+
+    for (int i = 0; i < 6; i++)
+    {
+        boutonsMenu[i]->setCheckable(true);
+        boutonsMenu[i]->setCursor(Qt::PointingHandCursor);
+        groupeMenu->addButton(boutonsMenu[i], i);   // id du bouton = index de page
+        lm->addWidget(boutonsMenu[i]);
+    }
+
+    btnDashboard->setChecked(true);
+    connect(groupeMenu, &QButtonGroup::idClicked, this, &Gutilisateur::allerPage);
+
     lm->addStretch();
+
+    // déconnexion accessible depuis tous les modules
+    QPushButton *btnDeconnexionMenu = new QPushButton("⏻   Déconnexion");
+    btnDeconnexionMenu->setCursor(Qt::PointingHandCursor);
+    connect(btnDeconnexionMenu, SIGNAL(clicked()), this, SLOT(deconnecter()));
+    lm->addWidget(btnDeconnexionMenu);
 
     principal->addWidget(menu);
 
@@ -129,7 +146,7 @@ void Gutilisateur::construireInterface()
     // COLONNE DROITE (en-tête + corps)
     // ========================================================
 
-    QWidget *droite = new QWidget();
+    QWidget *droite = new QWidget();      // page "Gestion des utilisateurs"
     QVBoxLayout *ld = new QVBoxLayout(droite);
     ld->setContentsMargins(0, 0, 0, 0);
     ld->setSpacing(0);
@@ -451,7 +468,6 @@ void Gutilisateur::construireInterface()
     lc->addLayout(milieu, 1);
 
     ld->addWidget(corps, 1);
-    principal->addWidget(droite, 1);
 
 
     // ========================================================
@@ -475,7 +491,7 @@ void Gutilisateur::construireInterface()
     // STYLE
     // ========================================================
 
-    centralWidget->setStyleSheet(
+    styleApp =
         // Menu
         "QFrame#menu { background: #1B488C; }"
         "QLabel#logoSoleil { color: #FBBF24; font-size: 40px; }"
@@ -525,8 +541,174 @@ void Gutilisateur::construireInterface()
         "QTableWidget::item:selected { background: #DBEAFE; color: #0F2A52; }"
         "QHeaderView::section { background: #F1F5F9; color: #0F2A52;"
         "font-weight: bold; padding: 6px; border: none; border-right: 1px solid #E2E8F0; }"
-        "QTableCornerButton::section { background: #F1F5F9; border: none; }"
-        );
+        "QTableCornerButton::section { background: #F1F5F9; border: none; }";
+
+    menu->setStyleSheet(styleApp);
+    droite->setStyleSheet(styleApp);
+
+
+    // ========================================================
+    // MODULES INTEGRES (un seul menu, une page par module)
+    // ========================================================
+
+    contenu = new QStackedWidget();
+
+    modBureaux     = new GBureaux(this);
+    modTechniciens = new Technicienne(this);
+    modStations    = new StationWindow(this);
+
+    contenu->insertWidget(PAGE_ACCUEIL,       creerPageAccueil());
+    contenu->insertWidget(PAGE_BUREAUX,       integrerModule(modBureaux));
+    contenu->insertWidget(PAGE_EQUIPEMENTS,   creerPageEquipements());
+    contenu->insertWidget(PAGE_TECHNICIENS,   integrerModule(modTechniciens));
+    contenu->insertWidget(PAGE_STATIONS,      integrerModule(modStations));
+    contenu->insertWidget(PAGE_UTILISATEURS,  droite);
+
+    contenu->setCurrentIndex(PAGE_ACCUEIL);
+    principal->addWidget(contenu, 1);
+}
+
+
+// ============================================================
+// NAVIGATION ENTRE LES MODULES
+// ============================================================
+
+void Gutilisateur::allerPage(int page)
+{
+    if (page < 0 || page >= contenu->count())
+        return;
+
+    contenu->setCurrentIndex(page);
+
+    QAbstractButton *b = groupeMenu->button(page);
+    if (b)
+        b->setChecked(true);
+}
+
+// Récupère la page centrale d'un module (QMainWindow) pour l'insérer
+// dans la pile ; sa barre latérale est masquée car le menu est commun.
+QWidget *Gutilisateur::integrerModule(QMainWindow *module)
+{
+    QWidget *page = module->takeCentralWidget();
+
+    // le style du module était posé sur sa fenêtre : on le pose sur la page
+    page->setStyleSheet(static_cast<QWidget *>(module)->styleSheet());
+
+    QWidget *barre = page->findChild<QWidget *>("sidebar");
+    if (barre)
+        barre->hide();
+
+    return page;
+}
+
+QWidget *Gutilisateur::creerPageSimple(const QString &titrePage,
+                                       const QString &sousTitre, QWidget *corps)
+{
+    QWidget *page = new QWidget();
+    QVBoxLayout *l = new QVBoxLayout(page);
+    l->setContentsMargins(0, 0, 0, 0);
+    l->setSpacing(0);
+
+    QFrame *entete = new QFrame();
+    entete->setObjectName("entete");
+    entete->setFixedHeight(72);
+
+    QVBoxLayout *le = new QVBoxLayout(entete);
+    le->setContentsMargins(30, 10, 30, 10);
+    QLabel *t = new QLabel(titrePage);
+    t->setObjectName("titrePage");
+    QLabel *s = new QLabel(sousTitre);
+    s->setObjectName("sousTitre");
+    le->addStretch();
+    le->addWidget(t);
+    le->addWidget(s);
+    le->addStretch();
+
+    QFrame *cadre = new QFrame();
+    cadre->setObjectName("corps");
+    QVBoxLayout *lc = new QVBoxLayout(cadre);
+    lc->setContentsMargins(30, 24, 30, 24);
+    lc->addWidget(corps);
+    lc->addStretch();
+
+    l->addWidget(entete);
+    l->addWidget(cadre, 1);
+
+    page->setStyleSheet(styleApp);
+    return page;
+}
+
+QWidget *Gutilisateur::creerPageAccueil()
+{
+    QWidget *corps = new QWidget();
+    QVBoxLayout *l = new QVBoxLayout(corps);
+    l->setContentsMargins(0, 0, 0, 0);
+    l->setSpacing(18);
+
+    labelBienvenue = new QLabel("Bienvenue");
+    labelBienvenue->setObjectName("titreCarte");
+    labelBienvenue->setStyleSheet("font-size: 20px;");
+    l->addWidget(labelBienvenue);
+
+    QLabel *info = new QLabel("Choisissez un module :");
+    info->setObjectName("texteCarte");
+    l->addWidget(info);
+
+    struct Raccourci { const char *texte; int page; };
+    static const Raccourci r[] = {
+        { "🏢   Gestion de bureau",        PAGE_BUREAUX },
+        { "⚙   Gestion des équipements",   PAGE_EQUIPEMENTS },
+        { "👷   Gestion des techniciens",   PAGE_TECHNICIENS },
+        { "📡   Gestion des stations",      PAGE_STATIONS },
+        { "👤   Gestion des utilisateurs",  PAGE_UTILISATEURS }
+    };
+
+    QGridLayout *g = new QGridLayout();
+    g->setSpacing(14);
+
+    for (int i = 0; i < 5; i++)
+    {
+        QPushButton *b = new QPushButton(r[i].texte);
+        b->setObjectName("btnPrimaire");
+        b->setCursor(Qt::PointingHandCursor);
+        b->setMinimumHeight(70);
+        b->setStyleSheet("font-size: 15px;");
+        int page = r[i].page;
+        connect(b, &QPushButton::clicked, this, [this, page]() { allerPage(page); });
+        g->addWidget(b, i / 3, i % 3);
+    }
+
+    l->addLayout(g);
+
+    return creerPageSimple("Accueil", "Smart Weather Management", corps);
+}
+
+// Le module "équipements" n'était pas dans l'archive : page d'attente.
+// Pour l'intégrer, remplacer l'appel par integrerModule(new MonModuleEquipements(this)).
+QWidget *Gutilisateur::creerPageEquipements()
+{
+    QLabel *l = new QLabel("Le module de gestion des équipements sera intégré ici.");
+    l->setObjectName("texteCarte");
+    return creerPageSimple("Gestion des équipements",
+                           "Module à intégrer", l);
+}
+
+// Affiche l'utilisateur connecté dans l'en-tête de chaque module
+void Gutilisateur::majNomConnecte(const QString &nomComplet)
+{
+    QWidget *pages[3] = { contenu->widget(PAGE_BUREAUX),
+                          contenu->widget(PAGE_TECHNICIENS),
+                          contenu->widget(PAGE_STATIONS) };
+
+    for (int i = 0; i < 3; i++)
+    {
+        QList<QLabel *> labels = pages[i]->findChildren<QLabel *>();
+        for (int j = 0; j < labels.size(); j++)
+            if (labels.at(j)->text().startsWith("Administrateur"))
+                labels.at(j)->setText(nomComplet + " ▼");
+    }
+
+    labelBienvenue->setText("Bienvenue, " + nomComplet);
 }
 
 
@@ -772,6 +954,9 @@ void Gutilisateur::seConnecter()
             loginMdp->clear();
             loginErreur->clear();
 
+            majNomConnecte(u.prenom + " " + u.nom);
+            allerPage(PAGE_ACCUEIL);
+
             pile->setCurrentIndex(1);
             return;
         }
@@ -809,6 +994,7 @@ void Gutilisateur::deconnecter()
     viderFormulaire();
     retourConnexion();
 
+    allerPage(PAGE_ACCUEIL);
     pile->setCurrentIndex(0);
 }
 

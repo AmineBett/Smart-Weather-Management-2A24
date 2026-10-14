@@ -1,13 +1,23 @@
 QT += core gui widgets printsupport
 
-CONFIG += c++11
+CONFIG += c++17
 
-TARGET = employes
+TARGET = SmartWeatherManagement
 TEMPLATE = app
 
 SOURCES += \
     main.cpp \
-    gutilisateur.cpp
+    gutilisateur.cpp \
+    gbureaux.cpp \
+    technicienne.cpp \
+    stationwindow.cpp
 
 HEADERS += \
-    gutilisateur.h
+    gutilisateur.h \
+    gbureaux.h \
+    technicienne.h \
+    stationwindow.h
+
+# Un seul fichier .ui pour tout le projet
+FORMS += \
+    gutilisateur.ui

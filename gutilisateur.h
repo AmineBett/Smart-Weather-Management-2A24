@@ -16,6 +16,11 @@
 #include <QDateTime>
 #include <QWidget>
 #include <QPainter>
+#include <QButtonGroup>
+
+class GBureaux;
+class Technicienne;
+class StationWindow;
 
 // ============================================================
 // GRAPHIQUE DONUT (statistiques par rôle)
@@ -143,6 +148,9 @@ private slots:
     void exporterPDF();
     void majHorloge();
 
+    // navigation entre les modules
+    void allerPage(int page);
+
 private:
 
     struct Utilisateur
@@ -222,6 +230,25 @@ private:
     DonutStats *donut;
     QLabel *legendeStats;
     QLabel *labelActivite;
+
+    // ----- navigation / modules intégrés -----
+    enum Page { PAGE_ACCUEIL = 0, PAGE_BUREAUX, PAGE_EQUIPEMENTS,
+                PAGE_TECHNICIENS, PAGE_STATIONS, PAGE_UTILISATEURS };
+
+    QStackedWidget *contenu;          // une page par module
+    QButtonGroup *groupeMenu;
+    GBureaux *modBureaux;
+    Technicienne *modTechniciens;
+    StationWindow *modStations;
+    QLabel *labelBienvenue;
+    QString styleApp;
+
+    QWidget *integrerModule(QMainWindow *module);
+    QWidget *creerPageSimple(const QString &titrePage, const QString &sousTitre,
+                             QWidget *corps);
+    QWidget *creerPageAccueil();
+    QWidget *creerPageEquipements();
+    void majNomConnecte(const QString &nomComplet);
 
     // ----- menu -----
     QPushButton *btnDashboard;
