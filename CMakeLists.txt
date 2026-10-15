@@ -27,6 +27,10 @@ qt_add_executable(SmartWeatherManagement
     weatherwisetest.cpp
     weatherwisetest.h
     weatherwisetest.ui
+
+    gutilisateur.cpp
+    gutilisateur.h
+    gutilisateur.ui
 )
 
 target_link_libraries(SmartWeatherManagement
